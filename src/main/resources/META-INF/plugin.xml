@@ -1,0 +1,19 @@
+<idea-plugin>
+  <id>dev.canny.idea-flutter-mcp</id>
+  <name>Flutter Debug MCP</name>
+  <version>0.4.1</version>
+  <vendor>Canny Local Tools</vendor>
+  <description>Native Streamable HTTP Flutter MCP server: DTD discovery, IDE run control, hot reload/restart, bounded logs and VM events, DevTools, breakpoints, stepping, object inspection and Flutter service extensions. Includes permission settings and private operation audit. Server disabled by default.</description>
+  <idea-version since-build="261.22158.277" until-build="263.*"/>
+  <depends>com.intellij.modules.platform</depends>
+  <depends>com.intellij.modules.lang</depends>
+  <depends>com.intellij.modules.xdebugger</depends>
+  <depends>Dart</depends>
+  <depends>io.flutter</depends>
+  <extensions defaultExtensionNs="com.intellij">
+    <applicationService serviceImplementation="dev.canny.ideafluttermcp.Settings"/>
+    <applicationService serviceImplementation="dev.canny.ideafluttermcp.BridgeService"/>
+    <applicationConfigurable parentId="tools" instance="dev.canny.ideafluttermcp.SettingsPage" id="dev.canny.ideafluttermcp.settings" displayName="Flutter Debug MCP"/>
+    <postStartupActivity implementation="dev.canny.ideafluttermcp.ProjectStartup"/>
+  </extensions>
+</idea-plugin>

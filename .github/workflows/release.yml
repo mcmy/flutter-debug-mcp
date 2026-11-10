@@ -1,0 +1,110 @@
+name: Release plugin
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    env:
+      IDEA_VERSION: '2026.1'
+      DART_VERSION: '511.0.0'
+      FLUTTER_VERSION: '98.0.0'
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check out tagged source
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Validate tag and project versions
+        id: metadata
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          python3 .github/scripts/release_metadata.py
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Download platform and plugin dependencies
+        run: |
+          sdk_dir="$RUNNER_TEMP/plugin-sdk"
+          mkdir -p "$sdk_dir/idea" "$sdk_dir/plugins"
+          curl --fail --location --retry 3 --connect-timeout 30 --max-time 900 \
+            "https://www.jetbrains.com/intellij-repository/releases/com/jetbrains/intellij/idea/ideaIC/$IDEA_VERSION/ideaIC-$IDEA_VERSION.zip" \
+            --output "$sdk_dir/idea.zip"
+          curl --fail --location --retry 3 --connect-timeout 30 --max-time 300 \
+            "https://plugins.jetbrains.com/plugin/download?pluginId=Dart&version=$DART_VERSION" \
+            --output "$sdk_dir/dart.zip"
+          curl --fail --location --retry 3 --connect-timeout 30 --max-time 300 \
+            "https://plugins.jetbrains.com/plugin/download?pluginId=io.flutter&version=$FLUTTER_VERSION" \
+            --output "$sdk_dir/flutter.zip"
+          unzip -q "$sdk_dir/idea.zip" -d "$sdk_dir/idea"
+          unzip -q "$sdk_dir/dart.zip" -d "$sdk_dir/plugins"
+          unzip -q "$sdk_dir/flutter.zip" -d "$sdk_dir/plugins"
+          test -d "$sdk_dir/idea/lib"
+          test -f "$sdk_dir/plugins/Dart/lib/Dart-$DART_VERSION.jar"
+          test -f "$sdk_dir/plugins/flutter-intellij/lib/flutter-intellij-$FLUTTER_VERSION.jar"
+
+      - name: Build plugin and run regression tests
+        run: |
+          sdk_dir="$RUNNER_TEMP/plugin-sdk"
+          python3 build.py \
+            --java-home "$JAVA_HOME" \
+            --idea-home "$sdk_dir/idea" \
+            --dart-jar "$sdk_dir/plugins/Dart/lib/Dart-$DART_VERSION.jar" \
+            --flutter-jar "$sdk_dir/plugins/flutter-intellij/lib/flutter-intellij-$FLUTTER_VERSION.jar"
+
+      - name: Generate custom repository index
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+          PLUGIN_VERSION: ${{ steps.metadata.outputs.version }}
+        run: |
+          python3 prepare_repository.py "dist/flutter-debug-mcp-$PLUGIN_VERSION.zip" \
+            --repository "$GITHUB_REPOSITORY" --tag "$RELEASE_TAG"
+
+      # Upload to a draft first so the latest repository never points at a
+      # release whose two assets are still being uploaded. Failed uploads can
+      # be retried by re-running the job; published releases are not replaced.
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          PLUGIN_VERSION: ${{ steps.metadata.outputs.version }}
+          PRERELEASE: ${{ steps.metadata.outputs.prerelease }}
+        run: |
+          if existing_draft=$(gh release view "$RELEASE_TAG" --json isDraft --jq '.isDraft'); then
+            if [[ "$existing_draft" != true ]]; then
+              echo "Release $RELEASE_TAG is already published; refusing to replace it." >&2
+              exit 1
+            fi
+          else
+            gh release create "$RELEASE_TAG" --verify-tag --draft \
+              --title "Flutter Debug MCP $PLUGIN_VERSION" --generate-notes
+          fi
+          gh release upload "$RELEASE_TAG" \
+            "dist/flutter-debug-mcp-$PLUGIN_VERSION.zip" dist/updatePlugins.xml --clobber
+          if [[ "$PRERELEASE" == true ]]; then
+            gh release edit "$RELEASE_TAG" --draft=false --prerelease --latest=false
+          else
+            gh release edit "$RELEASE_TAG" --draft=false --prerelease=false --latest
+          fi
