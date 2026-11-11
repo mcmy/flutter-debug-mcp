@@ -21,7 +21,7 @@ final class ToolPolicy {
       case "projects", "sessions", "dtd", "configurations", "get_configuration", "devices" -> "discovery";
       case "source" -> "inspect";
       case "logs", "events", "capture_events" -> "logs";
-      case "run", "rerun", "stop", "hot_reload", "hot_restart", "select_device", "create_configuration", "update_configuration" -> "run";
+      case "run", "rerun", "stop", "hot_reload", "hot_restart", "operation_status", "select_device", "create_configuration", "update_configuration" -> "run";
       case "devtools" -> "devtools";
       case "breakpoints", "set_breakpoint", "remove_breakpoint", "debug_action" -> "debug";
       case "vm_call" -> vmPermission(Json.required(args, "method"));

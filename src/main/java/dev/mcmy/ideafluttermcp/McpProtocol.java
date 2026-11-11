@@ -42,7 +42,7 @@ final class McpProtocol {
           String requested = Json.required(params, "protocolVersion");
           result = Json.obj("protocolVersion", VERSIONS.contains(requested) ? requested : VERSIONS.getFirst(),
               "capabilities", Json.obj("tools", Json.obj("listChanged", false)), "serverInfo", Json.obj("name", "flutter-debug-mcp", "version", "0.5.0"),
-              "instructions", "All tools always visible. Permission denial names the required permission in Settings > Tools > Flutter Debug MCP. Rerun changes sessionId; hot restart changes isolate/object IDs.");
+              "instructions", "All tools always visible. Permission denial names the required permission in Settings > Tools > Flutter Debug MCP. Run/rerun/stop/hot_reload/hot_restart return operationId and status. Poll flutter_operation_status for pending/unknown; never automatically resend or restart on timeout. Device lock and app foreground are unknown. Rerun changes sessionId; hot restart changes isolate/object IDs.");
         }
         case "ping" -> result = new JsonObject();
         case "tools/list" -> {

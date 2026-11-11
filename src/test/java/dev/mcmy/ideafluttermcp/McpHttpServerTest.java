@@ -26,7 +26,7 @@ public final class McpHttpServerTest {
       HttpResponse<String> notification = post(client, url, "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}");
       assert notification.statusCode() == 202 && notification.body().isEmpty();
       JsonObject list = rpc(client, url, request(2, "tools/list", new JsonObject()));
-      assert list.getAsJsonObject("result").getAsJsonArray("tools").size() == 47;
+      assert list.getAsJsonObject("result").getAsJsonArray("tools").size() == 48;
       JsonObject call = rpc(client, url, request(3, "tools/call", Json.obj("name", "flutter_get_stack", "arguments", Json.obj("sessionId", "s", "isolateId", "i", "limit", 10))));
       assert !call.getAsJsonObject("result").get("isError").getAsBoolean();
       assert received.get().get("method").getAsString().equals("getStack");
@@ -35,8 +35,17 @@ public final class McpHttpServerTest {
       call = rpc(client, url, request(4, "tools/call", Json.obj("name", "flutter_get_vm", "arguments", Json.obj("sessionId", "s"))));
       assert call.getAsJsonObject("result").get("isError").getAsBoolean();
       assert call.toString().contains("Permission denied: inspect") && call.toString().contains("Settings > Tools");
-      assert rpc(client, url, request(5, "tools/list", new JsonObject())).getAsJsonObject("result").getAsJsonArray("tools").size() == 47;
+      assert rpc(client, url, request(5, "tools/list", new JsonObject())).getAsJsonObject("result").getAsJsonArray("tools").size() == 48;
       allowed.set(true);
+      assert !rpc(client, url, request(30, "tools/call", Json.obj("name", "flutter_operation_status", "arguments", Json.obj("operationId", "op")))).getAsJsonObject("result").get("isError").getAsBoolean();
+      assert received.get().get("operationId").getAsString().equals("op");
+      assert rpc(client, url, request(31, "tools/call", Json.obj("name", "flutter_operation_status", "arguments", Json.obj()))).has("error");
+      for (String tool : java.util.List.of("flutter_run", "flutter_rerun", "flutter_stop", "flutter_hot_reload", "flutter_hot_restart")) {
+        JsonObject arguments = tool.equals("flutter_run") ? Json.obj("configurationId", "c", "waitSeconds", 0) : Json.obj("sessionId", "s", "waitSeconds", 0);
+        assert !rpc(client, url, request(32, "tools/call", Json.obj("name", tool, "arguments", arguments))).getAsJsonObject("result").get("isError").getAsBoolean();
+        arguments.addProperty("waitSeconds", 11);
+        assert rpc(client, url, request(33, "tools/call", Json.obj("name", tool, "arguments", arguments))).has("error");
+      }
       assert !rpc(client, url, request(20, "tools/call", Json.obj("name", "flutter_update_configuration", "arguments", Json.obj("configurationId", "c", "attachArgs", "--app-id=x", "envs", Json.obj("TOKEN", "value"))))).getAsJsonObject("result").get("isError").getAsBoolean();
       assert received.get().getAsJsonObject("envs").get("TOKEN").getAsString().equals("value");
       assert rpc(client, url, request(21, "tools/call", Json.obj("name", "flutter_update_configuration", "arguments", Json.obj("configurationId", "c", "envs", Json.obj("TOKEN", false))))).has("error");

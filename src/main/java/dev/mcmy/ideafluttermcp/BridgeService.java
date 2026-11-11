@@ -37,6 +37,10 @@ public final class BridgeService implements Disposable {
   private ScheduledFuture<?> poll;
   private AuditStore auditStore;
   private volatile boolean disposed;
+  private volatile OperationTracker operations = new OperationTracker();
+  private final Set<CompletableFuture<JsonObject>> pendingOperations = ConcurrentHashMap.newKeySet();
+  private final List<PendingLaunch> launches = new CopyOnWriteArrayList<>();
+  private record PendingLaunch(Project project, CompletableFuture<JsonObject> future, ProcessHandler handler) {}
   private String secret;
   private String lastStartupError;
 
@@ -124,6 +128,19 @@ public final class BridgeService implements Disposable {
   /** 发现新进程并在开始采集时标注日志边界。 */
   private synchronized void discover() {
     if (disposed || server == null || !Settings.getInstance().getState().enabled) return;
+    launches.removeIf(launch -> {
+      if (launch.future().isDone()) return true;
+      if (launch.project().isDisposed() || launch.handler().isProcessTerminated()) {
+        launch.future().complete(Json.obj("ok", false, "message", "Process ended before Flutter became ready"));
+        return true;
+      }
+      FlutterApp app = FlutterApp.fromProcess(launch.handler());
+      if (app != null && app.isStarted()) {
+        launch.future().complete(Json.obj("ok", true, "message", "Flutter application started; call flutter_sessions for the new sessionId"));
+        return true;
+      }
+      return false;
+    });
     for (Project project : ProjectManager.getInstance().getOpenProjects()) {
       if (project.isDisposed()) continue;
       for (FlutterApp app : FlutterApp.allFromProjectProcess(project)) {
@@ -146,6 +163,10 @@ public final class BridgeService implements Disposable {
     Iterator<Session> iterator = sessions.values().iterator();
     while (iterator.hasNext()) {
       Session session = iterator.next();
+      if (!session.app.getProject().isDisposed()) {
+        operations.observe(operationKey(session), operationState(session));
+        operations.observe("stop:" + operationKey(session), operationState(session));
+      }
       if (session.app.getProcessHandler().isProcessTerminated()) session.close();
       if (session.app.getProject().isDisposed() || (sessions.size() > 32 && session.app.getProcessHandler().isProcessTerminated())) { session.close(); iterator.remove(); }
     }
@@ -183,6 +204,8 @@ public final class BridgeService implements Disposable {
   }
   /** 执行已通过权限校验的桥接命令。 */
   private JsonElement execute(String tool, JsonObject args) throws Exception {
+    if (tool.equals("operation_status")) return operations.read(Json.required(args, "operationId"));
+    if (Set.of("run", "rerun", "stop", "hot_reload", "hot_restart").contains(tool)) return startOperation(tool, args);
     if (tool.equals("audit")) return audit(Json.string(args, "query", ""), Json.integer(args, "limit", 200, 1, 2000));
     if (tool.equals("permissions")) return Json.obj("enabled", Settings.getInstance().getState().enabled, "permissions", Settings.getInstance().getState().permissions);
     if (tool.equals("vm_call")) {
@@ -200,20 +223,6 @@ public final class BridgeService implements Disposable {
         catch (Exception error) { results.add(Json.obj("stream", stream, "error", error.getMessage())); }
       }
       return results;
-    }
-    if (tool.equals("hot_reload") || tool.equals("hot_restart")) {
-      Session session = session(args);
-      CompletableFuture<DaemonApi.RestartResult> result = edt(() -> {
-        Settings.getInstance().check("run");
-        if (session.app.getProject().isDisposed()) throw new IllegalStateException("Project closed");
-        com.intellij.openapi.fileEditor.FileDocumentManager.getInstance().saveAllDocuments();
-        if (!session.app.isStarted() || session.app.isReloading()) throw new IllegalStateException("App not ready or already reloading");
-        return tool.equals("hot_reload") ? session.app.performHotReload(false, "Flutter Debug MCP") : session.app.performRestartApp("Flutter Debug MCP");
-      });
-      DaemonApi.RestartResult value = result.get(90, TimeUnit.SECONDS);
-      if (session.app.getProject().isDisposed()) throw new IllegalStateException("Project closed");
-      if (!value.ok()) throw new IllegalStateException("Flutter restart failed: " + value.getCode() + " " + value.getMessage());
-      return Json.obj("ok", true, "message", value.getMessage());
     }
     if (tool.equals("devtools")) {
       Session session = session(args);
@@ -246,6 +255,8 @@ public final class BridgeService implements Disposable {
         for (Session session : sessions.values()) {
           FlutterApp app = session.app;
           out.add(Json.obj("sessionId", session.id, "projectPath", app.getProject().getBasePath(), "state", app.getState().toString(), "mode", app.getMode().toString(), "terminated", app.getProcessHandler().isProcessTerminated(), "deviceId", app.deviceId(), "deviceName", app.device().deviceName(), "vmServiceUri", app.getConnector().getWebSocketUrl(), "supportsHotReload", app.appSupportsHotReload()));
+          JsonObject row = out.get(out.size() - 1).getAsJsonObject();
+          row.add("operationState", operationState(session));
         }
       }
       return out;
@@ -317,38 +328,12 @@ public final class BridgeService implements Disposable {
         manager.makeStable(settings);
         return configurationDetails(project, settings);
       }
-      if (tool.equals("run")) {
-        String id = Json.required(args, "configurationId");
-        var config = configuration(project, args);
-        var executor = Json.bool(args, "debug", true) ? DefaultDebugExecutor.getDebugExecutorInstance() : DefaultRunExecutor.getRunExecutorInstance();
-        if (args.has("deviceId")) {
-          if (!(config.getConfiguration() instanceof SdkRunConfig)) throw new IllegalArgumentException("deviceId is supported only for Flutter application configurations");
-          selectDevice(project, Json.required(args, "deviceId"));
-        }
-        ExecutionEnvironmentBuilder.create(executor, config).buildAndExecute();
-        return Json.obj("accepted", true, "configurationId", id, "note", "Launch scheduled; call flutter_sessions for process state");
-      }
       return breakpoint(project, tool, args);
     }
     Session session = session(args);
     FlutterApp app = session.app;
     if (app.getProcessHandler().isProcessTerminated()) throw new IllegalStateException("Flutter process ended");
-    if (tool.equals("stop")) { app.getProcessHandler().destroyProcess(); return Json.obj("accepted", true); }
     var process = app.getFlutterDebugProcess();
-    if (tool.equals("rerun")) {
-      ExecutionEnvironment environment = process == null ? null : process.getExecutionEnvironment();
-      var manager = ExecutionManager.getInstance(app.getProject());
-      if (environment == null && manager instanceof com.intellij.execution.impl.ExecutionManagerImpl implementation) {
-        for (var content : manager.getContentManager().getAllDescriptors()) {
-          if (content.getProcessHandler() != app.getProcessHandler()) continue;
-          var matches = implementation.getExecutionEnvironments(content).stream().filter(item -> FlutterApp.fromEnv(item) == app).toList();
-          if (matches.size() == 1) environment = matches.getFirst();
-        }
-      }
-      if (environment == null) throw new IllegalStateException("Original execution environment unavailable; use flutter_run with configurationId");
-      manager.restartRunProfile(environment);
-      return Json.obj("accepted", true, "note", "Rerun scheduled; discover the new session ID");
-    }
     if (process == null) throw new IllegalStateException("IDE debug process unavailable");
     if (tool.equals("debug_action")) {
       XDebugSession debug = process.getSession();
@@ -367,6 +352,134 @@ public final class BridgeService implements Disposable {
     throw new IllegalArgumentException("Unknown IDE tool");
   }
   private static String emptyToNull(String value) { return value.isEmpty() ? null : value; }
+
+  /** IDE 连接标志不等于设备可响应；锁屏与应用前后台没有可靠通用信号。 */
+  private JsonObject operationState(Session session) {
+    FlutterApp app = session.app;
+    return Json.obj("ideConnected", app.isConnected(), "reloading", app.isReloading(),
+        "debuggerPaused", app.getFlutterDebugProcess() == null ? null : app.getFlutterDebugProcess().getSession().isSuspended(),
+        "deviceLocked", "unknown", "appForeground", "unknown", "activeOperationId", operations.activeId(operationKey(session)),
+        "stopOperationId", operations.activeId("stop:" + operationKey(session)));
+  }
+
+  private static String operationKey(Session session) {
+    RunnerAndConfigurationSettings config = null;
+    try { config = originalEnvironment(session.app).getRunnerAndConfigurationSettings(); }
+    catch (IllegalStateException ignored) {}
+
+    return config == null ? "session:" + session.id : session.app.getProject().getBasePath() + ":configuration:" + config.getUniqueID();
+  }
+
+  /** 在提交任何副作用之前登记操作；实际启动放到 EDT 队列，HTTP 等待不取消操作。 */
+  private JsonObject startOperation(String tool, JsonObject args) throws Exception {
+    int wait = Json.integer(args, "waitSeconds", 5, 0, 10);
+    record Target(Project project, Session session, RunnerAndConfigurationSettings config, String key) {}
+    Target target = edt(() -> {
+      Settings.getInstance().check("run");
+      if (tool.equals("run")) {
+        Project project = project(args);
+        var config = configuration(project, args);
+        return new Target(project, null, config, project.getBasePath() + ":configuration:" + config.getUniqueID());
+      }
+      Session session = session(args);
+      return new Target(session.app.getProject(), session, null, tool.equals("stop") ? "stop:" + operationKey(session) : operationKey(session));
+    });
+    OperationTracker tracker = operations;
+    CompletableFuture<JsonObject> result = new CompletableFuture<>();
+    var started = tracker.start(tool, target.key(), Json.obj("projectPath", target.project().getBasePath(),
+        "sessionId", target.session() == null ? null : target.session().id, "configurationId", target.config() == null ? null : target.config().getUniqueID()), () -> {
+      pendingOperations.add(result);
+      result.whenComplete((v, e) -> pendingOperations.remove(result));
+      ApplicationManager.getApplication().invokeLater(() -> {
+        boolean dispatched = false;
+        try {
+          Settings.getInstance().check("run");
+          if (disposed || server == null || tracker != operations || target.project().isDisposed()) throw new IllegalStateException("MCP service or project closed before dispatch");
+          Session session = target.session();
+          if (tool.equals("run")) {
+            var executor = Json.bool(args, "debug", true) ? DefaultDebugExecutor.getDebugExecutorInstance() : DefaultRunExecutor.getRunExecutorInstance();
+            if (args.has("deviceId")) {
+              if (!(target.config().getConfiguration() instanceof SdkRunConfig)) throw new IllegalArgumentException("deviceId requires a Flutter application configuration");
+              selectDevice(target.project(), Json.required(args, "deviceId"));
+            }
+            ExecutionEnvironment environment = ExecutionEnvironmentBuilder.create(executor, target.config()).build();
+            dispatched = true;
+            observeLaunch(environment, null, result, () -> { environment.getRunner().execute(environment); return null; });
+          } else if (tool.equals("stop")) {
+            ProcessHandler handler = session.app.getProcessHandler();
+            String stoppedKey = operationKey(session);
+            if (handler.isProcessTerminated()) { tracker.processStopped(stoppedKey); result.complete(Json.obj("ok", true, "message", "Process already stopped")); return; }
+            ProcessListener listener = new ProcessAdapter() {
+              @Override public void processTerminated(ProcessEvent event) { tracker.processStopped(stoppedKey); result.complete(Json.obj("ok", true, "message", "Process stopped")); }
+            };
+            handler.addProcessListener(listener);
+            result.whenComplete((v, e) -> handler.removeProcessListener(listener));
+            dispatched = true;
+            handler.destroyProcess();
+            if (handler.isProcessTerminated()) { tracker.processStopped(stoppedKey); result.complete(Json.obj("ok", true, "message", "Process stopped")); }
+          } else if (tool.equals("rerun")) {
+            ExecutionEnvironment environment = originalEnvironment(session.app);
+            dispatched = true;
+            observeLaunch(environment, session.app.getProcessHandler(), result,
+                () -> { ExecutionManager.getInstance(target.project()).restartRunProfile(environment); return null; });
+          } else {
+            FlutterApp app = session.app;
+            if (app.getProcessHandler().isProcessTerminated() || !app.isStarted() || app.isReloading()) throw new IllegalStateException("App not ready or IDE is already reloading; inspect flutter_sessions");
+            com.intellij.openapi.fileEditor.FileDocumentManager.getInstance().saveAllDocuments();
+            dispatched = true;
+            var future = tool.equals("hot_reload") ? app.performHotReload(false, "Flutter Debug MCP") : app.performRestartApp("Flutter Debug MCP");
+            future.whenComplete((value, error) -> {
+              if (error != null) result.completeExceptionally(error);
+              else result.complete(Json.obj("ok", value.ok(), "message", Objects.toString(value.getMessage(), "")));
+            });
+          }
+        } catch (Exception error) {
+          if (dispatched) result.completeExceptionally(error);
+          else result.complete(Json.obj("ok", false, "message", "Not dispatched: " + error.getMessage()));
+        }
+      });
+      return result;
+    });
+    if (!started.duplicate()) OperationTracker.await(started.operation(), wait);
+    JsonObject out = tracker.read(started.operation().id);
+    out.addProperty("duplicateSuppressed", started.duplicate());
+    return out;
+  }
+
+  private static ExecutionEnvironment originalEnvironment(FlutterApp app) {
+    var process = app.getFlutterDebugProcess();
+    ExecutionEnvironment environment = process == null ? null : process.getExecutionEnvironment();
+    var manager = ExecutionManager.getInstance(app.getProject());
+    if (environment == null && manager instanceof com.intellij.execution.impl.ExecutionManagerImpl implementation) {
+      for (var content : manager.getContentManager().getAllDescriptors()) {
+        if (content.getProcessHandler() != app.getProcessHandler()) continue;
+        var matches = implementation.getExecutionEnvironments(content).stream().filter(item -> FlutterApp.fromEnv(item) == app).toList();
+        if (matches.size() == 1) environment = matches.getFirst();
+      }
+    }
+    if (environment == null) throw new IllegalStateException("Original execution environment unavailable; use flutter_run with configurationId");
+    return environment;
+  }
+
+  private void observeLaunch(ExecutionEnvironment environment, ProcessHandler previous, CompletableFuture<JsonObject> result, Callable<?> dispatch) throws Exception {
+    var connection = environment.getProject().getMessageBus().connect(this);
+    result.whenComplete((v, e) -> connection.disconnect());
+    connection.subscribe(ExecutionManager.EXECUTION_TOPIC, new ExecutionListener() {
+      private boolean matches(ExecutionEnvironment candidate) {
+        return previous == null ? candidate == environment : candidate.getRunProfile() == environment.getRunProfile() && candidate.getExecutor().getId().equals(environment.getExecutor().getId());
+      }
+      @Override public void processNotStarted(String executorId, ExecutionEnvironment candidate) {
+        if (matches(candidate)) result.complete(Json.obj("ok", false, "message", "IDE did not start the process"));
+      }
+      @Override public void processNotStarted(String executorId, ExecutionEnvironment candidate, Throwable error) { processNotStarted(executorId, candidate); }
+      @Override public void processStarted(String executorId, ExecutionEnvironment candidate, ProcessHandler handler) {
+        if (!matches(candidate) || handler == previous || result.isDone()) return;
+        if (candidate.getRunProfile() instanceof SdkRunConfig) launches.add(new PendingLaunch(candidate.getProject(), result, handler));
+        else result.complete(Json.obj("ok", true, "message", "IDE process started; this configuration does not expose Flutter application readiness"));
+      }
+    });
+    dispatch.call();
+  }
 
   private static RunnerAndConfigurationSettings configuration(Project project, JsonObject args) {
     String id = Json.required(args, "configurationId");
@@ -465,6 +578,11 @@ public final class BridgeService implements Disposable {
     poll = null;
     if (server != null) server.close();
     server = null;
+    operations.close();
+    pendingOperations.forEach(future -> future.completeExceptionally(new IllegalStateException("MCP server stopped")));
+    pendingOperations.clear();
+    launches.clear();
+    operations = new OperationTracker();
     sessions.values().forEach(Session::close);
     sessions.clear();
   }

@@ -7,6 +7,8 @@ import java.nio.file.*;
 public final class CoreTest {
   /** 覆盖日志分片、淘汰、分页、上下文、权限分类和审计脱敏。 */
   public static void main(String[] args) throws Exception {
+    OperationTrackerTest.run();
+    assert ToolPolicy.permission("operation_status", Json.obj()).equals("run");
     LineBuffer logs = new LineBuffer(3);
     logs.append("stdout", "first\nhel");
     logs.append("stdout", "lo\nthird\nfourth\n");

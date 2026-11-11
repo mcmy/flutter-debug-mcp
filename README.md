@@ -4,7 +4,7 @@ Flutter debugging through MCP for IntelliJ IDEA and Android Studio.
 
 IDEA 插件直接提供原生 **Streamable HTTP MCP**。客户端使用 URL 连接，无需 Python、stdio 转发或额外请求头。
 
-默认全部分类权限开启，服务总开关关闭。启用后始终列出全部47个工具，调用时才检查权限。权限拒绝返回分类名称及 `Settings > Tools > Flutter Debug MCP`，客户端没有修改权限或开启服务器的接口。
+默认全部分类权限开启，服务总开关关闭。启用后始终列出全部48个工具，调用时才检查权限。权限拒绝返回分类名称及 `Settings > Tools > Flutter Debug MCP`，客户端没有修改权限或开启服务器的接口。
 
 ## 安装、配置与复制
 
@@ -109,7 +109,25 @@ AI 可先读取配置，再调用 `flutter_update_configuration` 保存局部修
 
 调用 `flutter_capture_events` 后用 `flutter_events` 查询VM事件；不同流单独返回订阅结果。`flutter_set_breakpoint` 设置可在IDEA中查看的持久断点，命中后 `flutter_get_vm` → `flutter_get_isolate` → `flutter_get_stack` 获取暂停状态、栈帧和变量引用，用 `flutter_get_object` 展开或 `flutter_evaluate` 求值。
 
-运行/重新运行/停止/IDEA步进返回 `accepted` 表示已交给IDE处理，需查询会话/VM确认实际结果；热重载/热重启等待Flutter实际响应。Hot restart后重新获取isolate/object ID，rerun后重新获取sessionId。超时后先查询状态，不盲目重发变更操作。
+启动、重新运行、停止、hot reload 和 hot restart 统一返回 `operationId` 和 `status`，默认只等待 **5秒**，可通过 `waitSeconds` 调整为0–10秒；尚未完成时立即返回跟踪信息，后续调用 `flutter_operation_status`，只需 `operationId`，不依赖重启前的 sessionId。例如：
+
+```json
+{"sessionId": "从 flutter_sessions 获取", "waitSeconds": 5}
+```
+
+将上述参数交给 `flutter_hot_reload`，得到 `operationId` 后查询：
+
+```json
+{"operationId": "从启动、停止或重载工具返回的 operationId"}
+```
+
+状态语义：`pending` 为仍在等待；等待达到120秒或请求异常且无法确定设备执行结果时为 `unknown`，并继续跟踪尚未完成的原请求；`succeeded` / `failed` 表示收到明确结果。只有明确结束才返回 `ok`；`pending` / `unknown` 不表示失败或已取消。启动应用需要确认进程创建且 Flutter 进入 started 状态；其他 Flutter 配置仅确认 IDE 进程创建。停止等待本地进程终止；热重载/热重启等待 Flutter 实际结果。
+
+同一项目配置（无法获取配置时按会话）的未解决操作共享重复调用保护，重复调用返回原操作及 `duplicateSuppressed=true`，不会再次执行。停止使用独立的保护范围，允许对卡住的会话明确请求停止；停止未完成时，同一目标的新启动或重载也会返回该停止操作，避免交错执行；确认进程停止后可以释放其未解决重载的保护。IDE 已排队的启动/重新运行可能仍会执行，因此停止旧进程不会擅自解除这类启动的保护，应先在 IDE 中检查或取消启动操作，避免重复启动。
+
+`flutter_sessions` 的 `operationState` 提供 IDE 连接标志、重载标志、调试暂停状态，以及活动操作ID；操作记录也会在轮询发现对应会话时附带 `target.lastObservedSessionState` 与采样时间 `stateObservedAt`，它们是最近一次观察而非实时探活。设备锁屏与应用前后台状态均返回 `unknown`，连接标志不保证设备当前可响应。遇到等待时先解锁、把应用切回前台并检查调试暂停，再查询原操作；不会自动解锁、恢复断点执行、重新发送请求或重启应用。
+
+操作记录保存在内存中，MCP服务关闭时清除，最多128条，优先保留未解决操作；全部额度都被未解决操作占用时拒绝新操作。已完成记录可能被淘汰。Hot restart后重新获取isolate/object ID，rerun后重新获取sessionId。IDEA步进仍返回 `accepted`，需通过会话/VM查询确认结果。
 
 Flutter扩展依运行SDK而异，先用 `flutter_get_isolate` 的 `extensionRPCs` 查看实际注册的方法，再用 `flutter_service_extension` 传入真实参数。Release模式、VM和设备平台可能限制调试、CPU采样或扩展，具体失败由底层返回。
 

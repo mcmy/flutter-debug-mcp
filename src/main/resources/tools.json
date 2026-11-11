@@ -238,7 +238,7 @@
   {
     "tool": {
       "name": "flutter_run",
-      "description": "通过 IDEA 配置启动 Flutter，默认 debug；可指定 deviceId 选择项目工具栏设备。返回 accepted 后查询 sessions 确认实际设备和状态；启动前勿并发切换设备。",
+      "description": "通过 IDEA 配置启动 Flutter，默认 debug，可传 deviceId。返回统一操作状态；应用配置需确认 Flutter started，其他配置只确认进程创建。 默认最多等待5秒，可用waitSeconds调整为0–10秒。返回operationId/status；pending或unknown时用flutter_operation_status查询，不重复提交。锁屏/前后台状态未知，必要时提示用户检查设备及调试暂停。",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -255,6 +255,12 @@
           "deviceId": {
             "type": "string",
             "description": "Optional exact id from flutter_devices; selects the project toolbar device before scheduling launch. Omit to use current selection."
+          },
+          "waitSeconds": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10,
+            "description": "Wait briefly for confirmed completion, default 5 seconds; 0 returns immediately. Pending/unknown operations remain active; poll flutter_operation_status instead of resending."
           }
         },
         "required": [
@@ -268,14 +274,40 @@
   },
   {
     "tool": {
+      "name": "flutter_operation_status",
+      "description": "查询 run/rerun/stop/hot_reload/hot_restart 的统一操作状态，无需旧 sessionId。pending=等待中；120秒无结果转为unknown但继续跟踪，后续仍可成功；succeeded/failed=已确认结果。不要因unknown重复调用，先检查设备锁屏、应用前后台、调试器与连接，必要时明确stop再run。记录在MCP停止时清除，最多保留128条，未解决操作优先保留。",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "operationId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "operationId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "bridge": "operation_status",
+    "method": null
+  },
+  {
+    "tool": {
       "name": "flutter_hot_reload",
-      "description": "执行 Flutter hot reload，等待实际操作结果。",
+      "description": "通过 IDE 执行 hot reload，收到 Flutter 明确结果才确认完成。 默认最多等待5秒，可用waitSeconds调整为0–10秒。返回operationId/status；pending或unknown时用flutter_operation_status查询，不重复提交。锁屏/前后台状态未知，必要时提示用户检查设备及调试暂停。",
       "inputSchema": {
         "type": "object",
         "properties": {
           "sessionId": {
             "type": "string",
             "description": "Exact ID from flutter_sessions; rediscover after rerun."
+          },
+          "waitSeconds": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10,
+            "description": "Wait briefly for confirmed completion, default 5 seconds; 0 returns immediately. Pending/unknown operations remain active; poll flutter_operation_status instead of resending."
           }
         },
         "required": [
@@ -290,13 +322,19 @@
   {
     "tool": {
       "name": "flutter_hot_restart",
-      "description": "执行 Flutter hot restart，等待实际结果；isolate/object ID 随后需重新获取。",
+      "description": "通过 IDE 执行 hot restart，收到 Flutter 明确结果才确认完成；成功后重新获取 isolate/object ID。 默认最多等待5秒，可用waitSeconds调整为0–10秒。返回operationId/status；pending或unknown时用flutter_operation_status查询，不重复提交。锁屏/前后台状态未知，必要时提示用户检查设备及调试暂停。",
       "inputSchema": {
         "type": "object",
         "properties": {
           "sessionId": {
             "type": "string",
             "description": "Exact ID from flutter_sessions; rediscover after rerun."
+          },
+          "waitSeconds": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10,
+            "description": "Wait briefly for confirmed completion, default 5 seconds; 0 returns immediately. Pending/unknown operations remain active; poll flutter_operation_status instead of resending."
           }
         },
         "required": [
@@ -311,13 +349,19 @@
   {
     "tool": {
       "name": "flutter_rerun",
-      "description": "停止并重新运行相同 IDEA 配置；返回 accepted，随后重新发现 sessionId。",
+      "description": "停止并重新运行同一 IDEA 配置，跟踪新进程启动。成功后用 flutter_sessions 获取新 sessionId。 默认最多等待5秒，可用waitSeconds调整为0–10秒。返回operationId/status；pending或unknown时用flutter_operation_status查询，不重复提交。锁屏/前后台状态未知，必要时提示用户检查设备及调试暂停。",
       "inputSchema": {
         "type": "object",
         "properties": {
           "sessionId": {
             "type": "string",
             "description": "Exact ID from flutter_sessions; rediscover after rerun."
+          },
+          "waitSeconds": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10,
+            "description": "Wait briefly for confirmed completion, default 5 seconds; 0 returns immediately. Pending/unknown operations remain active; poll flutter_operation_status instead of resending."
           }
         },
         "required": [
@@ -332,13 +376,19 @@
   {
     "tool": {
       "name": "flutter_stop",
-      "description": "停止指定 Flutter 进程；返回 accepted。",
+      "description": "停止指定会话的进程，收到本地进程终止确认才报告 succeeded；不强制杀进程。 默认最多等待5秒，可用waitSeconds调整为0–10秒。返回operationId/status；pending或unknown时用flutter_operation_status查询，不重复提交。锁屏/前后台状态未知，必要时提示用户检查设备及调试暂停。",
       "inputSchema": {
         "type": "object",
         "properties": {
           "sessionId": {
             "type": "string",
             "description": "Exact ID from flutter_sessions; rediscover after rerun."
+          },
+          "waitSeconds": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10,
+            "description": "Wait briefly for confirmed completion, default 5 seconds; 0 returns immediately. Pending/unknown operations remain active; poll flutter_operation_status instead of resending."
           }
         },
         "required": [

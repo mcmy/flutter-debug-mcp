@@ -13,11 +13,12 @@
 | `flutter_update_configuration` | 局部修改已有应用配置，使用 run 权限。省略字段保留，可选文本传空字符串清除；envs 整体替换，{} 清空。重命名后使用返回的新 id。不修改执行前任务，不重启进程。 | `configurationId`，以及至少一个配置字段 |
 | `flutter_devices` | 列出 Flutter 插件发现的已连接设备和 selected 状态。 |  |
 | `flutter_select_device` | 选择项目 Flutter 工具栏设备，使用 run 权限；不改变已有会话的设备。 | `deviceId` |
-| `flutter_run` | 通过 IDEA 运行配置启动 Flutter，默认 debug；可传 deviceId 先选择设备。返回 accepted，随后查询 sessions 确认实际设备和状态。 | `configurationId` |
-| `flutter_hot_reload` | 执行 Flutter hot reload，等待实际操作结果。 | `sessionId` |
-| `flutter_hot_restart` | 执行 Flutter hot restart，等待实际结果；isolate/object ID 随后需重新获取。 | `sessionId` |
-| `flutter_rerun` | 停止并重新运行相同 IDEA 配置；返回 accepted，随后重新发现 sessionId。 | `sessionId` |
-| `flutter_stop` | 停止指定 Flutter 进程；返回 accepted。 | `sessionId` |
+| `flutter_run` | 启动配置，支持 deviceId、waitSeconds；返回 operationId/status，应用等待 Flutter started，其他配置只确认进程创建。 | `configurationId` |
+| `flutter_hot_reload` | 热重载，默认等待5秒，未完成时查询统一操作状态，不重复调用。 | `sessionId` |
+| `flutter_hot_restart` | 热重启，默认等待5秒；确认成功后重新获取 isolate/object ID。 | `sessionId` |
+| `flutter_rerun` | 重新运行相同配置，跟踪新进程启动；成功后重新发现 sessionId。 | `sessionId` |
+| `flutter_stop` | 请求停止，进程实际结束才成功；也返回 operationId/status。 | `sessionId` |
+| `flutter_operation_status` | 查询上述五类操作。pending/unknown时继续查询；明确完成才是succeeded/failed。无需sessionId，使用run权限。 | `operationId` |
 | `flutter_logs` | 读取有界实时进程日志，行号从1开始，支持字面量搜索、前后上下文、分页及 channel。fromLine 小于缓存首行时 truncated=true。pending 返回尚未换行分片。 | `sessionId` |
 | `flutter_events` | 读取已订阅的 VM 事件，支持与 logs 相同的搜索、按行分页和上下文扩展。 | `sessionId` |
 | `flutter_capture_events` | 开启/关闭独立连接的 Debug/Isolate/Logging/Stdout/Stderr/Extension/GC/Timeline 流；不会取消 IDEA 的订阅。开始后用 events 查询。 | `sessionId` |
@@ -51,3 +52,5 @@
 | `flutter_get_timeline` | 获取VM时间线，可传微秒时间范围。 | `sessionId` |
 | `flutter_service_extension` | 调用已注册的 ext.flutter.* / ext.dart.io.* 扩展。先用 get_isolate 查看 extensionRPCs；可查询 Widget 树、截图、Inspector，或设置调试显示开关。具体参数取决于运行SDK。 | `sessionId`, `method` |
 | `flutter_vm_call` | 高级 VM RPC 入口，仅允许插件列明的查询、调试、表达式和Flutter扩展方法；按实际method校验权限，不能绕过分类权限。params遵循Dart VM Service规范。 | `sessionId`, `method` |
+
+运行操作的等待、去重、状态与锁屏处理规则见 [README 调试流程](../README.md#调试流程与日志)。
