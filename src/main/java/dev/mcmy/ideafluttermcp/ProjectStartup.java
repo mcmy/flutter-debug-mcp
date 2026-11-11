@@ -1,4 +1,4 @@
-package dev.canny.ideafluttermcp;
+package dev.mcmy.ideafluttermcp;
 
 import com.intellij.openapi.project.*;
 import com.intellij.openapi.startup.StartupActivity;

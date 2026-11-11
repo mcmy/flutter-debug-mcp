@@ -1,4 +1,4 @@
-package dev.canny.ideafluttermcp;
+package dev.mcmy.ideafluttermcp;
 
 import com.google.gson.*;
 import java.net.URI;

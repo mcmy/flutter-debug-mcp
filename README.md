@@ -8,9 +8,9 @@ IDEA 插件直接提供原生 **Streamable HTTP MCP**。客户端使用 URL 连�
 
 ## 安装、配置与复制
 
-插件及设置列表显示名为 **Flutter Debug MCP**，MCP 服务名为 `flutter-debug-mcp`，插件 ID 为 `dev.canny.idea-flutter-mcp`，Java 包名为 `dev.canny.ideafluttermcp`。
+插件及设置列表显示名为 **Flutter Debug MCP**，MCP 服务名为 `flutter-debug-mcp`，插件 ID 为 `dev.mcmy.idea-flutter-mcp`，Java 包名为 `dev.mcmy.ideafluttermcp`。
 
-本版保留现有插件ID、Java包名、设置标识与私有缓存目录，可直接升级当前安装的插件，端口、权限、URL令牌和审计继续复用。MCP客户端服务名改为 `flutter-debug-mcp`；本机项目 `.codex/config.toml` 和 `.ai/mcp/mcp.json` 已同步更名，URL保持一致。
+插件作者为 **mcmy**。本版统一使用 `dev.mcmy` 标识与 Java 包名。插件 ID 已变更，IDEA 将其识别为新插件；安装前先卸载旧 ID 的 Flutter Debug MCP，避免两个版本同时加载。设置存储标识与私有缓存目录保持不变，以便在同一 IDE 配置目录下继续读取原有端口、权限、URL令牌和审计。
 
 安装包：`dist/flutter-debug-mcp-0.4.1.zip`。
 
@@ -133,15 +133,15 @@ Android Studio和IDEA都需安装并启用官方Flutter、Dart插件。插件使
 
 ```sh
 # 261 SDK + Java21，作为最终发布包的构建基线
-python3 build.py --java-home /Users/canny/Library/Java/JavaVirtualMachines/ms-21.0.10/Contents/Home
+python3 build.py --java-home $HOME/Library/Java/JavaVirtualMachines/ms-21.0.10/Contents/Home
 # 或
-JAVA_HOME=/Users/canny/Library/Java/JavaVirtualMachines/ms-21.0.10/Contents/Home ./gradlew --no-daemon clean buildPlugin
+JAVA_HOME=$HOME/Library/Java/JavaVirtualMachines/ms-21.0.10/Contents/Home ./gradlew --no-daemon clean buildPlugin
 
 # Android Studio262 SDK + JBR25，独立验证新版平台API
-python3 build.py --idea-home "/Users/canny/Applications/Android Studio.app/Contents" --java-home "/Users/canny/Applications/Android Studio.app/Contents/jbr/Contents/Home"
+python3 build.py --idea-home "$HOME/Applications/Android Studio.app/Contents" --java-home "$HOME/Applications/Android Studio.app/Contents/jbr/Contents/Home"
 
 # IDEA263 SDK + JDK26，独立验证新版平台API
-python3 build.py --idea-home "/Users/canny/Applications/IntelliJ IDEA.app/Contents" --java-home /Users/canny/Library/Java/JavaVirtualMachines/openjdk-26.0.2.1/Contents/Home
+python3 build.py --idea-home "$HOME/Applications/IntelliJ IDEA.app/Contents" --java-home $HOME/Library/Java/JavaVirtualMachines/openjdk-26.0.2.1/Contents/Home
 ```
 
 构建执行 `CoreTest`、`VmConnectionTest`、`McpHttpServerTest`，分别覆盖日志/权限/审计、VM WebSocket协议、MCP HTTP生命周期/目录/权限拒绝恢复/参数/端口冲突/URL与配置。它们是启用断言的独立Java入口，由Gradle check显式执行，不是JUnit。`build.py`支持覆盖IDEA、Dart、Flutter、Java路径；Gradle支持 `-PideaHome` 和 `-PpluginsHome`。

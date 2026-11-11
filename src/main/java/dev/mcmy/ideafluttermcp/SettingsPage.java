@@ -1,4 +1,4 @@
-package dev.canny.ideafluttermcp;
+package dev.mcmy.ideafluttermcp;
 
 import com.intellij.openapi.options.*;
 import com.intellij.openapi.ide.CopyPasteManager;

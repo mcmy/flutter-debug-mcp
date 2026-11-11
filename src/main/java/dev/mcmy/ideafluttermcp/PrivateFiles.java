@@ -1,4 +1,4 @@
-package dev.canny.ideafluttermcp;
+package dev.mcmy.ideafluttermcp;
 
 import java.nio.file.*;
 import java.nio.file.attribute.PosixFilePermissions;

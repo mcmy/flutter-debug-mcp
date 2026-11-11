@@ -32,7 +32,7 @@ def main():
     subprocess.run([javac, '--release', '21', '-encoding', 'UTF-8', '-classpath', str(classes) + os.pathsep + cp, '-d', str(classes), *map(str, (root / 'src/test/java').rglob('*.java'))], check=True)
     shutil.copytree(root / 'src/main/resources', classes, dirs_exist_ok=True)
     for test in ('CoreTest', 'VmConnectionTest', 'McpHttpServerTest'):
-        subprocess.run([java, '-ea', '-classpath', str(classes) + os.pathsep + cp, 'dev.canny.ideafluttermcp.' + test], check=True)
+        subprocess.run([java, '-ea', '-classpath', str(classes) + os.pathsep + cp, 'dev.mcmy.ideafluttermcp.' + test], check=True)
     dist = root / 'dist'
     dist.mkdir(exist_ok=True)
     jar = root / 'build/flutter-debug-mcp.jar'

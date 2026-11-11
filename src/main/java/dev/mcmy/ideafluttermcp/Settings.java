@@ -1,4 +1,4 @@
-package dev.canny.ideafluttermcp;
+package dev.mcmy.ideafluttermcp;
 
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.components.*;

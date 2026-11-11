@@ -1,6 +1,6 @@
 plugins { java }
 
-group = "dev.canny"
+group = "dev.mcmy"
 version = "0.4.1"
 
 val userHome = System.getProperty("user.home")
@@ -25,19 +25,19 @@ tasks.withType<JavaCompile>().configureEach {
 val coreTest = tasks.register<JavaExec>("coreTest") {
     dependsOn(tasks.testClasses)
     classpath = sourceSets.test.get().runtimeClasspath
-    mainClass.set("dev.canny.ideafluttermcp.CoreTest")
+    mainClass.set("dev.mcmy.ideafluttermcp.CoreTest")
     enableAssertions = true
 }
 val vmTest = tasks.register<JavaExec>("vmTest") {
     dependsOn(tasks.testClasses)
     classpath = sourceSets.test.get().runtimeClasspath
-    mainClass.set("dev.canny.ideafluttermcp.VmConnectionTest")
+    mainClass.set("dev.mcmy.ideafluttermcp.VmConnectionTest")
     enableAssertions = true
 }
 val httpTest = tasks.register<JavaExec>("httpTest") {
     dependsOn(tasks.testClasses)
     classpath = sourceSets.test.get().runtimeClasspath
-    mainClass.set("dev.canny.ideafluttermcp.McpHttpServerTest")
+    mainClass.set("dev.mcmy.ideafluttermcp.McpHttpServerTest")
     enableAssertions = true
 }
 // 回归套件使用独立入口和断言，由 check 显式执行。
