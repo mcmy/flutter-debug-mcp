@@ -7,9 +7,13 @@
 | `flutter_projects` | 列出 IDEA 开放项目。服务开关位于 Settings > Tools > Flutter Debug MCP。 |  |
 | `flutter_sessions` | 列出 IDEA 已运行 Flutter 会话、设备、运行模式与 VM Service URI。 |  |
 | `flutter_dtd` | 获取项目现有 DTD URI；不创建 DTD。ready=false 时地址为空。 |  |
-| `flutter_configurations` | 列出已有 Flutter 运行配置及 configurationId。 |  |
-| `flutter_devices` | 列出 Flutter 插件发现的设备。 |  |
-| `flutter_run` | 通过 IDEA 运行配置启动 Flutter，默认 debug；返回 accepted，随后查询 sessions 确认。 | `configurationId` |
+| `flutter_configurations` | 列出 Flutter 配置及 id、选中状态；应用配置直接包含入口、run/attach 参数、flavor、环境变量实际值和 selectedDeviceId，其他配置 editable=false。 |  |
+| `flutter_get_configuration` | 读取单个配置详情，字段与列表一致，使用 discovery 权限。 | `configurationId` |
+| `flutter_create_configuration` | 创建并保存 Flutter 应用配置，支持 additionalArgs、attachArgs、buildFlavor、envs；使用 run 权限，不启动。 | `name`, `filePath` |
+| `flutter_update_configuration` | 局部修改已有应用配置，使用 run 权限。省略字段保留，可选文本传空字符串清除；envs 整体替换，{} 清空。重命名后使用返回的新 id。不修改执行前任务，不重启进程。 | `configurationId`，以及至少一个配置字段 |
+| `flutter_devices` | 列出 Flutter 插件发现的已连接设备和 selected 状态。 |  |
+| `flutter_select_device` | 选择项目 Flutter 工具栏设备，使用 run 权限；不改变已有会话的设备。 | `deviceId` |
+| `flutter_run` | 通过 IDEA 运行配置启动 Flutter，默认 debug；可传 deviceId 先选择设备。返回 accepted，随后查询 sessions 确认实际设备和状态。 | `configurationId` |
 | `flutter_hot_reload` | 执行 Flutter hot reload，等待实际操作结果。 | `sessionId` |
 | `flutter_hot_restart` | 执行 Flutter hot restart，等待实际结果；isolate/object ID 随后需重新获取。 | `sessionId` |
 | `flutter_rerun` | 停止并重新运行相同 IDEA 配置；返回 accepted，随后重新发现 sessionId。 | `sessionId` |

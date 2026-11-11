@@ -17,6 +17,10 @@ import com.jetbrains.lang.dart.ide.runner.DartLineBreakpointType;
 import com.jetbrains.lang.dart.ide.toolingDaemon.DartToolingDaemonService;
 import com.intellij.util.concurrency.AppExecutorUtil;
 import io.flutter.run.daemon.*;
+import io.flutter.run.SdkRunConfig;
+import io.flutter.run.SdkFields;
+import io.flutter.run.FlutterRunConfigurationType;
+import io.flutter.run.FlutterDevice;
 import java.net.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
@@ -246,7 +250,7 @@ public final class BridgeService implements Disposable {
       }
       return out;
     }
-    if (Set.of("dtd", "configurations", "devices", "run", "breakpoints", "set_breakpoint", "remove_breakpoint", "source").contains(tool)) {
+    if (Set.of("dtd", "configurations", "get_configuration", "create_configuration", "update_configuration", "select_device", "devices", "run", "breakpoints", "set_breakpoint", "remove_breakpoint", "source").contains(tool)) {
       Project project = project(args);
       if (tool.equals("source")) {
         String path = Json.required(args, "filePath");
@@ -266,18 +270,61 @@ public final class BridgeService implements Disposable {
       }
       if (tool.equals("devices")) {
         JsonArray out = new JsonArray();
-        for (var device : DeviceService.getInstance(project).getConnectedDevices()) out.add(Json.obj("id", device.deviceId(), "name", device.deviceName(), "platform", device.platform(), "emulator", device.emulator()));
+        var service = DeviceService.getInstance(project);
+        for (var device : service.getConnectedDevices()) out.add(Json.obj("id", device.deviceId(), "name", device.deviceName(), "platform", device.platform(), "emulator", device.emulator(), "selected", device.equals(service.getSelectedDevice())));
         return out;
+      }
+      if (tool.equals("select_device")) {
+        FlutterDevice device = selectDevice(project, Json.required(args, "deviceId"));
+        return Json.obj("selected", true, "deviceId", device.deviceId(), "deviceName", device.deviceName());
       }
       if (tool.equals("configurations")) {
         JsonArray out = new JsonArray();
-        for (var configuration : RunManager.getInstance(project).getAllSettings()) if (configuration.getType().getId().toLowerCase(Locale.ROOT).contains("flutter")) out.add(Json.obj("id", configuration.getUniqueID(), "name", configuration.getName(), "type", configuration.getType().getId()));
+        for (var configuration : RunManager.getInstance(project).getAllSettings()) if (configuration.getType().getId().toLowerCase(Locale.ROOT).contains("flutter")) out.add(configurationDetails(project, configuration));
         return out;
+      }
+      if (tool.equals("get_configuration")) return configurationDetails(project, configuration(project, args));
+      if (tool.equals("create_configuration") || tool.equals("update_configuration")) {
+        var manager = RunManager.getInstance(project);
+        boolean create = tool.equals("create_configuration");
+        var settings = create ? manager.createConfiguration(Json.required(args, "name"), FlutterRunConfigurationType.getInstance().getFactory()) : configuration(project, args);
+        if (!(settings.getConfiguration() instanceof SdkRunConfig config)) throw new IllegalArgumentException("Only Flutter application configurations are editable");
+        JsonObject patch = new JsonObject();
+        for (String key : RunConfigurationOptions.TEXT) if (args.has(key)) patch.add(key, args.get(key));
+        if (args.has("envs")) patch.add("envs", args.get("envs"));
+        if (patch.isEmpty()) throw new IllegalArgumentException("Provide at least one configuration field to update");
+        JsonObject updated = RunConfigurationOptions.merge(configurationOptions(settings), patch);
+        String name = Json.required(updated, "name");
+        if (manager.getAllSettings().stream().anyMatch(other -> other != settings && other.getType().equals(settings.getType()) && other.getName().equals(name))) throw new IllegalArgumentException("Flutter configuration name already exists: " + name);
+        String filePath = Json.required(updated, "filePath");
+        Path path = Path.of(filePath);
+        if (!path.isAbsolute()) path = Path.of(project.getBasePath()).resolve(path);
+        path = path.normalize();
+        if (!Files.isRegularFile(path) || !path.toString().endsWith(".dart")) throw new IllegalArgumentException("filePath must refer to an existing Dart file (absolute or relative to project)");
+        // Construct all replacement values before touching the stored configuration.
+        SdkFields fields = new SdkFields();
+        fields.setFilePath(path.toString());
+        fields.setAdditionalArgs(emptyToNull(Json.string(updated, "additionalArgs", "")));
+        fields.setAttachArgs(emptyToNull(Json.string(updated, "attachArgs", "")));
+        fields.setBuildFlavor(emptyToNull(Json.string(updated, "buildFlavor", "")));
+        Map<String, String> envs = new LinkedHashMap<>();
+        updated.getAsJsonObject("envs").entrySet().forEach(entry -> envs.put(entry.getKey(), entry.getValue().getAsString()));
+        fields.setEnvs(envs);
+        config.setFields(fields);
+        settings.setName(name);
+        if (create) settings.storeInLocalWorkspace();
+        manager.addConfiguration(settings);
+        manager.makeStable(settings);
+        return configurationDetails(project, settings);
       }
       if (tool.equals("run")) {
         String id = Json.required(args, "configurationId");
-        var config = RunManager.getInstance(project).getAllSettings().stream().filter(item -> item.getUniqueID().equals(id) && item.getType().getId().toLowerCase(Locale.ROOT).contains("flutter")).findFirst().orElseThrow(() -> new IllegalArgumentException("Flutter configuration not found"));
+        var config = configuration(project, args);
         var executor = Json.bool(args, "debug", true) ? DefaultDebugExecutor.getDebugExecutorInstance() : DefaultRunExecutor.getRunExecutorInstance();
+        if (args.has("deviceId")) {
+          if (!(config.getConfiguration() instanceof SdkRunConfig)) throw new IllegalArgumentException("deviceId is supported only for Flutter application configurations");
+          selectDevice(project, Json.required(args, "deviceId"));
+        }
         ExecutionEnvironmentBuilder.create(executor, config).buildAndExecute();
         return Json.obj("accepted", true, "configurationId", id, "note", "Launch scheduled; call flutter_sessions for process state");
       }
@@ -318,6 +365,36 @@ public final class BridgeService implements Disposable {
       return Json.obj("accepted", true, "action", action);
     }
     throw new IllegalArgumentException("Unknown IDE tool");
+  }
+  private static String emptyToNull(String value) { return value.isEmpty() ? null : value; }
+
+  private static RunnerAndConfigurationSettings configuration(Project project, JsonObject args) {
+    String id = Json.required(args, "configurationId");
+    return RunManager.getInstance(project).getAllSettings().stream().filter(item -> item.getUniqueID().equals(id) && item.getType().getId().toLowerCase(Locale.ROOT).contains("flutter")).findFirst().orElseThrow(() -> new IllegalArgumentException("Flutter configuration not found; call flutter_configurations"));
+  }
+
+  private static FlutterDevice selectDevice(Project project, String id) {
+    var service = DeviceService.getInstance(project);
+    var device = service.getConnectedDevices().stream().filter(item -> item.deviceId().equals(id)).findFirst().orElseThrow(() -> new IllegalArgumentException("Device unavailable; call flutter_devices"));
+    service.setSelectedDevice(device);
+    return device;
+  }
+
+  private static JsonObject configurationOptions(RunnerAndConfigurationSettings settings) {
+    var fields = ((SdkRunConfig)settings.getConfiguration()).getFields();
+    return Json.obj("name", settings.getName(), "filePath", Objects.toString(fields.getFilePath(), ""), "additionalArgs", Objects.toString(fields.getAdditionalArgs(), ""), "attachArgs", Objects.toString(fields.getAttachArgs(), ""), "buildFlavor", Objects.toString(fields.getBuildFlavor(), ""), "envs", fields.getEnvs());
+  }
+
+  private static JsonObject configurationDetails(Project project, RunnerAndConfigurationSettings settings) {
+    boolean editable = settings.getConfiguration() instanceof SdkRunConfig;
+    JsonObject out = editable ? configurationOptions(settings) : Json.obj("name", settings.getName());
+    out.addProperty("id", settings.getUniqueID());
+    out.addProperty("type", settings.getType().getId());
+    out.addProperty("editable", editable);
+    out.addProperty("selected", settings == RunManager.getInstance(project).getSelectedConfiguration());
+    var device = DeviceService.getInstance(project).getSelectedDevice();
+    out.add("selectedDeviceId", Json.GSON.toJsonTree(device == null ? null : device.deviceId()));
+    return out;
   }
   /** 创建可在 IDEA 中查看并随项目保存的 Dart 行断点。 */
   private JsonElement breakpoint(Project project, String tool, JsonObject args) {

@@ -35,6 +35,20 @@ public final class CoreTest {
     try { crlf.read(Json.obj("before", 1, "after", 1, "limit", 1)); throw new AssertionError(); } catch (IllegalArgumentException expected) {}
     try { Json.integer(new JsonObject(), "line", 0, 1, 100); throw new AssertionError(); } catch (IllegalArgumentException expected) {}
     assert ToolPolicy.vmPermission("getStack").equals("inspect");
+    assert ToolPolicy.permission("get_configuration", new JsonObject()).equals("discovery");
+    for (String tool : java.util.List.of("create_configuration", "update_configuration", "select_device")) assert ToolPolicy.permission(tool, new JsonObject()).equals("run");
+    JsonObject original = Json.obj("name", "main", "filePath", "lib/main.dart", "additionalArgs", "--verbose", "attachArgs", "--app-id=app", "buildFlavor", "dev", "envs", Json.obj("KEEP", "yes"));
+    JsonObject updated = RunConfigurationOptions.merge(original, Json.obj("additionalArgs", "--dart-define=VALUE='hello world'", "buildFlavor", "", "envs", Json.obj("NEW", "value")));
+    assert updated.get("attachArgs").equals(original.get("attachArgs"));
+    assert updated.get("filePath").equals(original.get("filePath"));
+    assert updated.get("buildFlavor").getAsString().isEmpty();
+    assert !updated.getAsJsonObject("envs").has("KEEP");
+    assert original.getAsJsonObject("envs").has("KEEP");
+    assert RunConfigurationOptions.merge(original, Json.obj("envs", new JsonObject())).getAsJsonObject("envs").isEmpty();
+    for (JsonObject invalid : java.util.List.of(Json.obj("name", " "), Json.obj("envs", Json.obj("BAD=KEY", "x")), Json.obj("envs", Json.obj("KEY", 12)), Json.obj("filePath", JsonNull.INSTANCE), Json.obj("additionalArgs", "bad\0arg"), Json.obj("unknown", "x"))) {
+      try { RunConfigurationOptions.merge(original, invalid); throw new AssertionError("Invalid patch accepted"); } catch (IllegalArgumentException expected) {}
+      assert original.get("additionalArgs").getAsString().equals("--verbose");
+    }
     assert ToolPolicy.vmPermission("evaluateInFrame").equals("evaluate");
     assert ToolPolicy.vmPermission("ext.flutter.inspector.getRootWidgetSummaryTree").equals("extensions");
     try { ToolPolicy.vmPermission("kill"); throw new AssertionError(); } catch (IllegalArgumentException expected) {}

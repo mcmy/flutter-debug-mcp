@@ -11,7 +11,7 @@ public final class Settings implements PersistentStateComponent<Settings.Data> {
   static {
     PERMISSIONS.put("discovery", "发现项目、设备、DTD 和 VM 地址");
     PERMISSIONS.put("logs", "读取运行日志和运行时事件");
-    PERMISSIONS.put("run", "启动、停止、重新运行、热重载、热重启");
+    PERMISSIONS.put("run", "启动、停止、重新运行、热重载、热重启、选择设备和编辑运行配置");
     PERMISSIONS.put("inspect", "查询堆栈、变量、对象、内存和性能");
     PERMISSIONS.put("debug", "断点、暂停、继续、步进和异常暂停策略");
     PERMISSIONS.put("evaluate", "执行表达式、调用对象方法（可改变应用状态）");

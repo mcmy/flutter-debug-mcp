@@ -49,7 +49,7 @@
   {
     "tool": {
       "name": "flutter_configurations",
-      "description": "列出已有 Flutter 运行配置及 configurationId。",
+      "description": "列出 Flutter 配置及 id、选中状态；可编辑的应用配置包含 filePath、additionalArgs、attachArgs、buildFlavor、envs（含实际值）及当前 selectedDeviceId。其他 Flutter 配置 editable=false。",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -68,7 +68,7 @@
   {
     "tool": {
       "name": "flutter_devices",
-      "description": "列出 Flutter 插件发现的设备。",
+      "description": "列出 Flutter 插件发现的已连接设备及 selected 状态；使用返回的精确 id 选择设备。",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -86,8 +86,159 @@
   },
   {
     "tool": {
+      "name": "flutter_get_configuration",
+      "description": "读取单个 Flutter 配置的当前参数；应用配置包含环境变量实际值。",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectPath": {
+            "type": "string",
+            "description": "Absolute open project path; required when multiple projects are open."
+          },
+          "configurationId": {
+            "type": "string",
+            "description": "Exact id returned by flutter_configurations; renaming changes this id."
+          }
+        },
+        "required": [
+          "configurationId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "bridge": "get_configuration",
+    "method": null
+  },
+  {
+    "tool": {
+      "name": "flutter_create_configuration",
+      "description": "创建并保存 IDEA 原生 Flutter 应用配置，不启动。返回 id 用于后续启动或编辑。",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectPath": {
+            "type": "string",
+            "description": "Absolute open project path; required when multiple projects are open."
+          },
+          "name": {
+            "type": "string",
+            "description": "IDEA configuration name; must be unique and nonblank."
+          },
+          "filePath": {
+            "type": "string",
+            "description": "Existing Dart entrypoint, absolute or relative to projectPath."
+          },
+          "additionalArgs": {
+            "type": "string",
+            "description": "Additional flutter run arguments, exactly as in IDEA. Empty string clears. No shell expansion."
+          },
+          "attachArgs": {
+            "type": "string",
+            "description": "Additional flutter attach arguments. Empty string clears."
+          },
+          "buildFlavor": {
+            "type": "string",
+            "description": "Build flavor; empty string clears."
+          },
+          "envs": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Replaces the entire configured environment map; {} clears it. Omit to preserve. Values may contain secrets."
+          }
+        },
+        "required": [
+          "name",
+          "filePath"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "bridge": "create_configuration",
+    "method": null
+  },
+  {
+    "tool": {
+      "name": "flutter_update_configuration",
+      "description": "局部修改并保存 Flutter 应用配置；省略字段保留，空字符串清除可选文本，envs 整体替换。保留执行前任务，不自动重启。重命名后使用返回的新 id。",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectPath": {
+            "type": "string",
+            "description": "Absolute open project path; required when multiple projects are open."
+          },
+          "configurationId": {
+            "type": "string",
+            "description": "Exact id returned by flutter_configurations; renaming changes this id."
+          },
+          "name": {
+            "type": "string",
+            "description": "IDEA configuration name; must be unique and nonblank."
+          },
+          "filePath": {
+            "type": "string",
+            "description": "Existing Dart entrypoint, absolute or relative to projectPath."
+          },
+          "additionalArgs": {
+            "type": "string",
+            "description": "Additional flutter run arguments, exactly as in IDEA. Empty string clears. No shell expansion."
+          },
+          "attachArgs": {
+            "type": "string",
+            "description": "Additional flutter attach arguments. Empty string clears."
+          },
+          "buildFlavor": {
+            "type": "string",
+            "description": "Build flavor; empty string clears."
+          },
+          "envs": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Replaces the entire configured environment map; {} clears it. Omit to preserve. Values may contain secrets."
+          }
+        },
+        "required": [
+          "configurationId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "bridge": "update_configuration",
+    "method": null
+  },
+  {
+    "tool": {
+      "name": "flutter_select_device",
+      "description": "选择项目 Flutter 工具栏中的已连接设备，不停止或迁移现有会话；之后的启动使用当前选择。",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectPath": {
+            "type": "string",
+            "description": "Absolute open project path; required when multiple projects are open."
+          },
+          "deviceId": {
+            "type": "string",
+            "description": "Exact connected device id from flutter_devices."
+          }
+        },
+        "required": [
+          "deviceId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "bridge": "select_device",
+    "method": null
+  },
+  {
+    "tool": {
       "name": "flutter_run",
-      "description": "通过 IDEA 运行配置启动 Flutter，默认 debug；返回 accepted，随后查询 sessions 确认。",
+      "description": "通过 IDEA 配置启动 Flutter，默认 debug；可指定 deviceId 选择项目工具栏设备。返回 accepted 后查询 sessions 确认实际设备和状态；启动前勿并发切换设备。",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -100,6 +251,10 @@
           },
           "debug": {
             "type": "boolean"
+          },
+          "deviceId": {
+            "type": "string",
+            "description": "Optional exact id from flutter_devices; selects the project toolbar device before scheduling launch. Omit to use current selection."
           }
         },
         "required": [

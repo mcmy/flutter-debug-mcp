@@ -105,7 +105,11 @@ final class McpProtocol {
       if (schema.has("required")) for (JsonElement key : schema.getAsJsonArray("required")) if (!object.has(key.getAsString())) throw new IllegalArgumentException(path + ": missing " + key.getAsString());
       for (var entry : object.entrySet()) {
         if (properties.has(entry.getKey())) validate(properties.getAsJsonObject(entry.getKey()), entry.getValue(), path + "." + entry.getKey());
-        else if (schema.has("additionalProperties") && !schema.get("additionalProperties").getAsBoolean()) throw new IllegalArgumentException(path + ": unknown field " + entry.getKey());
+        else if (schema.has("additionalProperties")) {
+          JsonElement additional = schema.get("additionalProperties");
+          if (additional.isJsonObject()) validate(additional.getAsJsonObject(), entry.getValue(), path + "." + entry.getKey());
+          else if (!additional.getAsBoolean()) throw new IllegalArgumentException(path + ": unknown field " + entry.getKey());
+        }
       }
     }
   }

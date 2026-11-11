@@ -4,7 +4,7 @@ Flutter debugging through MCP for IntelliJ IDEA and Android Studio.
 
 IDEA 插件直接提供原生 **Streamable HTTP MCP**。客户端使用 URL 连接，无需 Python、stdio 转发或额外请求头。
 
-默认全部分类权限开启，服务总开关关闭。启用后始终列出全部43个工具，调用时才检查权限。权限拒绝返回分类名称及 `Settings > Tools > Flutter Debug MCP`，客户端没有修改权限或开启服务器的接口。
+默认全部分类权限开启，服务总开关关闭。启用后始终列出全部47个工具，调用时才检查权限。权限拒绝返回分类名称及 `Settings > Tools > Flutter Debug MCP`，客户端没有修改权限或开启服务器的接口。
 
 ## 安装、配置与复制
 
@@ -56,8 +56,8 @@ tool_timeout_sec = 120
 
 | 范围 | 功能 |
 | --- | --- |
-| 发现 | 开放项目、Flutter会话、设备、运行配置、现有DTD和VM地址 |
-| 运行 | 使用IDEA配置启动Run/Debug、停止、重新运行、hot reload、hot restart |
+| 发现 | 开放项目、Flutter会话、设备与选中状态、运行配置及完整应用启动参数、现有DTD和VM地址 |
+| 运行 | 选择设备、创建/修改IDEA应用运行配置、启动Run/Debug、停止、重新运行、hot reload、hot restart |
 | 日志 | stdout/stderr、稳定行号、分页、字面量搜索、大小写选项、来源筛选、匹配上下文扩展 |
 | 事件 | 订阅Debug、Isolate、Logging、Stdout、Stderr、Extension、GC、Timeline并按行查询 |
 | DevTools | 获取或由官方Flutter插件启动DevTools，返回连接URL |
@@ -73,6 +73,25 @@ tool_timeout_sec = 120
 ## 调试流程与日志
 
 先调用 `flutter_projects` 和 `flutter_sessions` 获取目标项目及 `sessionId`；多个开放项目时项目级工具必须提供 `projectPath`。`flutter_dtd` 只读取现有DTD，未就绪返回 `ready=false, uri=null`，不会自行创建DTD。
+
+`flutter_configurations` 直接返回 Flutter 应用配置的 `id`、`name`、`filePath`（Dart entrypoint）、`additionalArgs`（Additional run args）、`attachArgs`（Additional attach args）、`buildFlavor`、`envs`（环境变量实际值）、`selected` 和 `selectedDeviceId`。`flutter_get_configuration` 可读取单个配置；非应用配置仍在列表中，以 `editable=false` 标识，不提供这组应用字段。读取配置使用 `discovery` 权限，选择设备、创建与修改配置使用 `run` 权限；审计不保存参数和环境变量值。
+
+AI 可先读取配置，再调用 `flutter_update_configuration` 保存局部修改，例如：
+
+```json
+{
+  "configurationId": "从 flutter_configurations 返回的 id 原样复制",
+  "filePath": "lib/main_dev.dart",
+  "additionalArgs": "--dart-define=API_ENV=dev --verbose",
+  "attachArgs": "--app-id=com.example.app",
+  "buildFlavor": "dev",
+  "envs": {"API_ENV": "dev"}
+}
+```
+
+仅传需要修改的字段，省略的字段保留；`additionalArgs`、`attachArgs`、`buildFlavor` 传空字符串清除。`envs` 整体替换当前配置的环境变量，传 `{}` 清空；需要保留旧变量时先读取并合并。入口支持项目相对路径，保存时转换为绝对路径并检查 Dart 文件存在。`name` 可重命名，之后使用返回的新 `id`。`flutter_create_configuration` 必须提供 `name` 和 `filePath`，可同时传入其余字段；新配置保存在 IDEA 本地工作区。现有配置的存储位置及“执行前”任务保持原样，暂不提供编辑任务链的接口。保存不自动停止或重新启动进程，参数按 IDEA 的规则解析，不执行 shell 展开。
+
+`flutter_devices` 列出当前已连接设备及 `selected` 状态，`flutter_select_device` 接受精确 `deviceId` 并切换项目 Flutter 工具栏设备。也可在 `flutter_run` 传 `deviceId`，先选择再调度启动；省略则沿用当前工具栏设备。设备选择属于项目状态，不绑定到单个配置；启动完成前避免并发切换设备，通过 `flutter_sessions` 确认实际设备。它不会把已有运行会话迁移到新设备，也不负责启动尚未连接的模拟器。
 
 `flutter_logs` 示例：
 

@@ -26,7 +26,7 @@ public final class McpHttpServerTest {
       HttpResponse<String> notification = post(client, url, "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}");
       assert notification.statusCode() == 202 && notification.body().isEmpty();
       JsonObject list = rpc(client, url, request(2, "tools/list", new JsonObject()));
-      assert list.getAsJsonObject("result").getAsJsonArray("tools").size() == 43;
+      assert list.getAsJsonObject("result").getAsJsonArray("tools").size() == 47;
       JsonObject call = rpc(client, url, request(3, "tools/call", Json.obj("name", "flutter_get_stack", "arguments", Json.obj("sessionId", "s", "isolateId", "i", "limit", 10))));
       assert !call.getAsJsonObject("result").get("isError").getAsBoolean();
       assert received.get().get("method").getAsString().equals("getStack");
@@ -35,8 +35,15 @@ public final class McpHttpServerTest {
       call = rpc(client, url, request(4, "tools/call", Json.obj("name", "flutter_get_vm", "arguments", Json.obj("sessionId", "s"))));
       assert call.getAsJsonObject("result").get("isError").getAsBoolean();
       assert call.toString().contains("Permission denied: inspect") && call.toString().contains("Settings > Tools");
-      assert rpc(client, url, request(5, "tools/list", new JsonObject())).getAsJsonObject("result").getAsJsonArray("tools").size() == 43;
+      assert rpc(client, url, request(5, "tools/list", new JsonObject())).getAsJsonObject("result").getAsJsonArray("tools").size() == 47;
       allowed.set(true);
+      assert !rpc(client, url, request(20, "tools/call", Json.obj("name", "flutter_update_configuration", "arguments", Json.obj("configurationId", "c", "attachArgs", "--app-id=x", "envs", Json.obj("TOKEN", "value"))))).getAsJsonObject("result").get("isError").getAsBoolean();
+      assert received.get().getAsJsonObject("envs").get("TOKEN").getAsString().equals("value");
+      assert rpc(client, url, request(21, "tools/call", Json.obj("name", "flutter_update_configuration", "arguments", Json.obj("configurationId", "c", "envs", Json.obj("TOKEN", false))))).has("error");
+      assert rpc(client, url, request(22, "tools/call", Json.obj("name", "flutter_create_configuration", "arguments", Json.obj("name", "main")))).has("error");
+      assert !rpc(client, url, request(23, "tools/call", Json.obj("name", "flutter_select_device", "arguments", Json.obj("deviceId", "chrome")))).getAsJsonObject("result").get("isError").getAsBoolean();
+      assert received.get().get("deviceId").getAsString().equals("chrome");
+      assert !rpc(client, url, request(24, "tools/call", Json.obj("name", "flutter_run", "arguments", Json.obj("configurationId", "c", "deviceId", "chrome", "debug", true)))).getAsJsonObject("result").get("isError").getAsBoolean();
       assert !rpc(client, url, request(6, "tools/call", Json.obj("name", "flutter_get_vm", "arguments", Json.obj("sessionId", "s")))).getAsJsonObject("result").get("isError").getAsBoolean();
       assert rpc(client, url, request(7, "tools/call", Json.obj("name", "flutter_logs", "arguments", Json.obj("sessionId", "s", "limit", -1)))).getAsJsonObject("error").get("code").getAsInt() == -32602;
       assert rpc(client, url, request(8, "missing", new JsonObject())).getAsJsonObject("error").get("code").getAsInt() == -32601;

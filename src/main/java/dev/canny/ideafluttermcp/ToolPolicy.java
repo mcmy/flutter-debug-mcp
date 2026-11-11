@@ -18,10 +18,10 @@ final class ToolPolicy {
   /** 获取每个桥接工具需要的权限。 */
   static String permission(String tool, com.google.gson.JsonObject args) {
     return switch (tool) {
-      case "projects", "sessions", "dtd", "configurations", "devices" -> "discovery";
+      case "projects", "sessions", "dtd", "configurations", "get_configuration", "devices" -> "discovery";
       case "source" -> "inspect";
       case "logs", "events", "capture_events" -> "logs";
-      case "run", "rerun", "stop", "hot_reload", "hot_restart" -> "run";
+      case "run", "rerun", "stop", "hot_reload", "hot_restart", "select_device", "create_configuration", "update_configuration" -> "run";
       case "devtools" -> "devtools";
       case "breakpoints", "set_breakpoint", "remove_breakpoint", "debug_action" -> "debug";
       case "vm_call" -> vmPermission(Json.required(args, "method"));
