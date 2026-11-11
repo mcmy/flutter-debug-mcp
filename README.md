@@ -12,9 +12,9 @@ IDEA 插件直接提供原生 **Streamable HTTP MCP**。客户端使用 URL 连�
 
 插件作者为 **mcmy**。本版统一使用 `dev.mcmy` 标识与 Java 包名。插件 ID 已变更，IDEA 将其识别为新插件；安装前先卸载旧 ID 的 Flutter Debug MCP，避免两个版本同时加载。设置存储标识与私有缓存目录保持不变，以便在同一 IDE 配置目录下继续读取原有端口、权限、URL令牌和审计。
 
-安装包：`dist/flutter-debug-mcp-0.4.1.zip`。
+安装包：`dist/flutter-debug-mcp-0.5.0.zip`。
 
-通过 GitHub 自定义插件仓库安装及后续更新，见 [发布与自定义插件仓库](docs/publishing.md)。推送与源码版本一致的 `v*` tag（如 `v0.4.1`）会自动构建、运行回归并发布包含插件 ZIP 与仓库索引的 GitHub Release。首次发布完成后，可在 IDEA 的 **Manage Plugin Repositories** 中添加：
+通过 GitHub 自定义插件仓库安装及后续更新，见 [发布与自定义插件仓库](docs/publishing.md)。推送与源码版本一致的 `v*` tag（如 `v0.5.0`）会自动构建、运行回归并发布包含插件 ZIP 与仓库索引的 GitHub Release。首次发布完成后，可在 IDEA 的 **Manage Plugin Repositories** 中添加：
 
 ```text
 https://github.com/mcmy/flutter-debug-mcp/releases/latest/download/updatePlugins.xml

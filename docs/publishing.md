@@ -13,13 +13,13 @@
 ```sh
 # 先提交本次源码与 workflow，再推送分支
 git push origin main
-git tag -a v0.4.1 -m "Release 0.4.1"
-git push origin v0.4.1
+git tag -a v0.5.0 -m "Release 0.5.0"
+git push origin v0.5.0
 ```
 
-后续发布前，同步更新 `build.gradle.kts` 和 `src/main/resources/META-INF/plugin.xml` 中的版本，提交后推送对应 tag，例如 `v0.4.2`。tag 必须严格等于 `v<plugin.xml 版本>`，两个文件版本不一致或 tag 不匹配时，CI 会在下载依赖前失败。
+后续发布前，同步更新 `build.gradle.kts` 和 `src/main/resources/META-INF/plugin.xml` 中的版本，提交后推送对应 tag，例如 `v0.5.1`。tag 必须严格等于 `v<plugin.xml 版本>`，两个文件版本不一致或 tag 不匹配时，CI 会在下载依赖前失败。
 
-workflow 在 Ubuntu 上使用 Java 21，自动从 JetBrains 下载固定版本的 IntelliJ IDEA 2026.1 SDK、Dart 511.0.0 和 Flutter 98.0.0，执行 `build.py` 的三组回归测试与打包，再从安装包生成索引。安装包和 `updatePlugins.xml` 先上传至草稿 Release，两份上传完成后发布。正式版设为 Latest；如 `v0.4.2-rc.1` 的预发布 tag（源码版本也需为 `0.4.2-rc.1`）会发布为 Pre-release，不改变正式版仓库入口。
+workflow 在 Ubuntu 上使用 Java 21，自动从 JetBrains 下载固定版本的 IntelliJ IDEA 2026.1 SDK、Dart 511.0.0 和 Flutter 98.0.0，执行 `build.py` 的三组回归测试与打包，再从安装包生成索引。安装包和 `updatePlugins.xml` 先上传至草稿 Release，两份上传完成后发布。正式版设为 Latest；如 `v0.5.1-rc.1` 的预发布 tag（源码版本也需为 `0.5.1-rc.1`）会发布为 Pre-release，不改变正式版仓库入口。
 
 无需手动配置 PAT 或其他 Secret，使用 GitHub 自动提供的 `GITHUB_TOKEN`，workflow 已声明 `contents: write`。仓库需要启用 GitHub Actions；若组织策略禁止 Actions 创建 Release，需调整对应策略。
 
@@ -41,14 +41,14 @@ workflow 在 Ubuntu 上使用 Java 21，自动从 JetBrains 下载固定版本�
 3. 从实际安装包生成索引：
 
    ```sh
-   python3 prepare_repository.py dist/flutter-debug-mcp-0.4.1.zip
+   python3 prepare_repository.py dist/flutter-debug-mcp-0.5.0.zip
    ```
 
-   输出 `dist/updatePlugins.xml`。插件 ID、版本、兼容范围、名称、说明和必要插件依赖均读取安装包内的 `META-INF/plugin.xml`。默认下载地址指向 `v0.4.1` Release 下的对应 ZIP。如果 tag 使用其他名称，传入 `--tag 实际标签名`。
+   输出 `dist/updatePlugins.xml`。插件 ID、版本、兼容范围、名称、说明和必要插件依赖均读取安装包内的 `META-INF/plugin.xml`。默认下载地址指向 `v0.5.0` Release 下的对应 ZIP。如果 tag 使用其他名称，传入 `--tag 实际标签名`。
 
-4. 在 GitHub → Releases → Draft a new release，创建 tag **`v0.4.1`**，确认 tag 指向本次构建对应的源码提交。上传两份附件：
+4. 在 GitHub → Releases → Draft a new release，创建 tag **`v0.5.0`**，确认 tag 指向本次构建对应的源码提交。上传两份附件：
 
-   - `dist/flutter-debug-mcp-0.4.1.zip`
+   - `dist/flutter-debug-mcp-0.5.0.zip`
    - `dist/updatePlugins.xml`
 
    发布为正式 Release，并设为 **Latest**。首次发布前固定仓库地址尚不可用；Draft 和 Pre-release 不用于这个正式仓库入口。不要上传 GitHub 自动生成的 Source code ZIP 作为插件安装包。
@@ -57,7 +57,7 @@ workflow 在 Ubuntu 上使用 Java 21，自动从 JetBrains 下载固定版本�
 
    ```text
    https://github.com/mcmy/flutter-debug-mcp/releases/latest/download/updatePlugins.xml
-   https://github.com/mcmy/flutter-debug-mcp/releases/download/v0.4.1/flutter-debug-mcp-0.4.1.zip
+   https://github.com/mcmy/flutter-debug-mcp/releases/download/v0.5.0/flutter-debug-mcp-0.5.0.zip
    ```
 
 索引使用固定的 latest 入口，索引内的 ZIP 地址固定到具体 tag，避免索引和安装包版本错配。

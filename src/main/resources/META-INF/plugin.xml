@@ -1,7 +1,7 @@
 <idea-plugin>
   <id>dev.mcmy.idea-flutter-mcp</id>
   <name>Flutter Debug MCP</name>
-  <version>0.4.1</version>
+  <version>0.5.0</version>
   <vendor>mcmy</vendor>
   <description>Native Streamable HTTP Flutter MCP server: DTD discovery, IDE run control, hot reload/restart, bounded logs and VM events, DevTools, breakpoints, stepping, object inspection and Flutter service extensions. Includes permission settings and private operation audit. Server disabled by default.</description>
   <idea-version since-build="261.22158.277" until-build="263.*"/>

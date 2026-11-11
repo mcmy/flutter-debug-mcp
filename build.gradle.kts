@@ -1,7 +1,7 @@
 plugins { java }
 
 group = "dev.mcmy"
-version = "0.4.1"
+version = "0.5.0"
 
 val userHome = System.getProperty("user.home")
 val ideaHome = providers.gradleProperty("ideaHome").orElse("$userHome/Library/Caches/idea-flutter-mcp-sdk/ideaIC-2026.1")
