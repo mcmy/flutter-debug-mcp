@@ -19,7 +19,7 @@
 | `flutter_hot_restart` | 热重启，默认等待5秒；确认成功后重新获取 isolate/object ID。 | `sessionId` |
 | `flutter_rerun` | 重新运行相同配置，跟踪新进程启动；成功后重新发现 sessionId。 | `sessionId` |
 | `flutter_stop` | 请求停止，进程实际结束才成功；也返回 operationId/status。 | `sessionId` |
-| `flutter_operation_status` | 查询上述五类操作。pending/unknown时继续查询；明确完成才是succeeded/failed。无需sessionId，使用run权限。 | `operationId` |
+| `flutter_operation_status` | 查询上述五类操作。未完成的 Android 热重载或热重启附带屏幕状态，息屏和低功耗显示会提示可能导致等待。明确完成才是 `succeeded` / `failed`。使用 run 权限。 | `operationId` |
 | `flutter_logs` | 读取有界实时进程日志，行号从1开始，支持字面量搜索、前后上下文、分页及 channel。fromLine 小于缓存首行时 truncated=true。pending 返回尚未换行分片。 | `sessionId` |
 | `flutter_events` | 读取已订阅的 VM 事件，支持与 logs 相同的搜索、按行分页和上下文扩展。 | `sessionId` |
 | `flutter_capture_events` | 开启/关闭独立连接的 Debug/Isolate/Logging/Stdout/Stderr/Extension/GC/Timeline 流；不会取消 IDEA 的订阅。开始后用 events 查询。 | `sessionId` |

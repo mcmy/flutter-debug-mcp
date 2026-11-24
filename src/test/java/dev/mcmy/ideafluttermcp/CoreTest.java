@@ -11,6 +11,15 @@ public final class CoreTest {
     OperationTrackerTest.run();
     RuntimeNavigationTest.run();
     assert ToolPolicy.permission("operation_status", Json.obj()).equals("run");
+    String display = "  mDisplayId=0\n    mBaseDisplayInfo=DisplayInfo{\"内置屏幕\", displayId 0, state %s, committedState ON}\n";
+    String external = "  mDisplayId=2\n    mBaseDisplayInfo=DisplayInfo{\"External\", displayId 2, state OFF, type EXTERNAL}\n";
+    assert DeviceScreen.parse(external + display.formatted("ON")) == DeviceScreen.State.ON;
+    assert DeviceScreen.parse(display.formatted("OFF") + external) == DeviceScreen.State.OFF;
+    assert DeviceScreen.parse(display.formatted("DOZE_SUSPEND")).needsWake();
+    assert DeviceScreen.parse(display.formatted("DOZE")).needsWake();
+    assert DeviceScreen.parse(external) == DeviceScreen.State.UNKNOWN;
+    assert DeviceScreen.parse(display.formatted("UNRECOGNIZED")) == DeviceScreen.State.UNKNOWN;
+    assert !new DeviceScreen.Reading(DeviceScreen.State.DOZE, null, java.time.Instant.now()).json().get("screenOff").getAsBoolean();
     LineBuffer logs = new LineBuffer(3);
     logs.append("stdout", "first\nhel");
     logs.append("stdout", "lo\nthird\nfourth\n");

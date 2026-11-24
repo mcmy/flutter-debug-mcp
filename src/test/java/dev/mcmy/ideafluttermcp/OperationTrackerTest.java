@@ -1,5 +1,6 @@
 package dev.mcmy.ideafluttermcp;
 
+import java.time.Instant;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.*;
 
@@ -20,12 +21,28 @@ final class OperationTrackerTest {
       for (var call : calls) assert call.get().duplicate() && call.get().operation() == first.operation();
     }
     assert dispatched.get() == 1;
+    assert tracker.screenSessionId(first.operation().id).equals("s");
+    var off = new DeviceScreen.Reading(DeviceScreen.State.OFF, null, Instant.ofEpochSecond(1));
+    tracker.observeScreen(first.operation().id, off);
+    var pending = tracker.read(first.operation().id);
+    assert pending.get("status").getAsString().equals("pending");
+    assert pending.getAsJsonObject("deviceScreen").get("screenOff").getAsBoolean();
+    assert pending.get("hint").getAsString().contains("may explain the delay");
+    assert !pending.get("retryAllowed").getAsBoolean() && !future.isDone();
     now.set(TimeUnit.SECONDS.toNanos(121));
     var unknown = tracker.read(first.operation().id);
     assert unknown.get("status").getAsString().equals("unknown");
     assert !unknown.has("ok") && !unknown.get("retryAllowed").getAsBoolean();
+    assert unknown.getAsJsonObject("deviceScreen").get("screenState").getAsString().equals("off");
+    tracker.observeScreen(first.operation().id, new DeviceScreen.Reading(DeviceScreen.State.ON, null, Instant.ofEpochSecond(2)));
+    tracker.observeScreen(first.operation().id, off);
+    var awake = tracker.read(first.operation().id);
+    assert awake.getAsJsonObject("deviceScreen").get("screenState").getAsString().equals("on");
+    assert !awake.get("hint").getAsString().contains("may explain the delay");
     future.complete(Json.obj("ok", true, "message", "Reload completed after unlock"));
     assert tracker.read(first.operation().id).get("status").getAsString().equals("succeeded");
+    assert !tracker.read(first.operation().id).has("deviceScreen");
+    assert tracker.screenSessionId(first.operation().id) == null;
     long elapsed = tracker.read(first.operation().id).get("elapsedMillis").getAsLong();
     now.addAndGet(TimeUnit.SECONDS.toNanos(10));
     assert tracker.read(first.operation().id).get("elapsedMillis").getAsLong() == elapsed;

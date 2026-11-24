@@ -3,7 +3,7 @@ import java.util.Locale
 plugins { java }
 
 group = "dev.mcmy"
-version = "0.6.0"
+version = "0.7.0"
 
 val userHome = File(System.getProperty("user.home"))
 val os = System.getProperty("os.name").lowercase(Locale.ROOT)

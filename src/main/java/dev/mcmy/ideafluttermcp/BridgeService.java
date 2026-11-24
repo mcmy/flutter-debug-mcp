@@ -206,7 +206,7 @@ public final class BridgeService implements Disposable {
   }
   /** 执行已通过权限校验的桥接命令。 */
   private JsonElement execute(String tool, JsonObject args) throws Exception {
-    if (tool.equals("operation_status")) return operations.read(Json.required(args, "operationId"));
+    if (tool.equals("operation_status")) return operationStatus(Json.required(args, "operationId"));
     if (Set.of("run", "rerun", "stop", "hot_reload", "hot_restart").contains(tool)) return startOperation(tool, args);
     if (tool.equals("navigate")) return navigate(args);
     if (tool.equals("audit")) return audit(Json.string(args, "query", ""), Json.integer(args, "limit", 200, 1, 2000));
@@ -420,6 +420,24 @@ public final class BridgeService implements Disposable {
     return config == null ? "session:" + session.id : session.app.getProject().getBasePath() + ":configuration:" + config.getUniqueID();
   }
 
+  private JsonObject operationStatus(String id) {
+    OperationTracker tracker = operations;
+    String sessionId = tracker.screenSessionId(id);
+    if (sessionId != null) {
+      Session target;
+      synchronized (this) { target = sessions.get(sessionId); }
+      if (target != null) observeDeviceScreen(tracker, id, target);
+    }
+    return tracker.read(id);
+  }
+
+  private static void observeDeviceScreen(OperationTracker tracker, String id, Session target) {
+    FlutterDevice device = target.app.device();
+    if (DeviceNavigation.android(device.platform())) {
+      tracker.observeScreen(id, DeviceScreen.read(target.app.getProject(), device.deviceId()));
+    }
+  }
+
   /** 在提交任何副作用之前登记操作；实际启动放到 EDT 队列，HTTP 等待不取消操作。 */
   private JsonObject startOperation(String tool, JsonObject args) throws Exception {
     int wait = Json.integer(args, "waitSeconds", 5, 0, 10);
@@ -490,7 +508,14 @@ public final class BridgeService implements Disposable {
       });
       return result;
     });
-    if (!started.duplicate()) OperationTracker.await(started.operation(), wait);
+    if (!started.duplicate()) {
+      if (OperationTracker.checksScreen(tool)) {
+        try {
+          AppExecutorUtil.getAppExecutorService().execute(() -> observeDeviceScreen(tracker, started.operation().id, target.session()));
+        } catch (RejectedExecutionException ignored) { /* Screen diagnostics are optional, even during IDE shutdown. */ }
+      }
+      OperationTracker.await(started.operation(), wait);
+    }
     JsonObject out = tracker.read(started.operation().id);
     out.addProperty("duplicateSuppressed", started.duplicate());
     return out;

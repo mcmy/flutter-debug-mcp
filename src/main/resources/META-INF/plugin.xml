@@ -1,14 +1,13 @@
 <idea-plugin>
   <id>dev.mcmy.idea-flutter-mcp</id>
   <name>Flutter Debug MCP</name>
-  <version>0.6.0</version>
+  <version>0.7.0</version>
   <vendor>mcmy</vendor>
   <description>Native Streamable HTTP Flutter MCP server: DTD discovery, IDE run control, hot reload/restart, runtime navigation, bounded logs and VM events, DevTools, breakpoints, stepping, object inspection and Flutter service extensions. Includes permission settings and private operation audit. Server disabled by default.</description>
   <change-notes><![CDATA[
     <ul>
-      <li>Adds system deep links and debug navigation for running Flutter sessions.</li>
-      <li>Supports Windows Android SDK discovery, IDE paths, and account-private storage for credentials and audit logs.</li>
-      <li>Uses platform-specific build defaults for Windows, Linux, and macOS.</li>
+      <li>Reports Android screen state while hot reload or hot restart is pending.</li>
+      <li>Simplifies MCP tool and parameter descriptions.</li>
     </ul>
   ]]></change-notes>
   <idea-version since-build="261.22158.277" until-build="263.*"/>

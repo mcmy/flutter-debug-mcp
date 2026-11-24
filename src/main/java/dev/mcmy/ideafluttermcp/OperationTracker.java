@@ -24,6 +24,7 @@ final class OperationTracker {
     final CompletableFuture<Void> completion = new CompletableFuture<>();
     String status = "pending";
     String message = "Waiting for Flutter";
+    DeviceScreen.Reading screen;
     String completedAt;
     long finished = -1;
     boolean superseded;
@@ -33,6 +34,8 @@ final class OperationTracker {
 
   OperationTracker() { this(System::nanoTime); }
   OperationTracker(LongSupplier clock) { this.clock = clock; }
+
+  static boolean checksScreen(String kind) { return kind.equals("hot_reload") || kind.equals("hot_restart"); }
 
   synchronized Start start(String kind, String target, JsonObject context, Callable<CompletableFuture<JsonObject>> launch) throws Exception {
     if (closed) throw new IllegalStateException("MCP server stopped");
@@ -80,11 +83,39 @@ final class OperationTracker {
         "deviceLocked", "unknown", "message", operation.message);
     out.add("target", operation.context.deepCopy());
     if (!unresolved) out.addProperty("ok", status.equals("succeeded"));
-    else out.addProperty("hint", "Check whether the device needs unlocking and bring the app to foreground; check debugger pause and connection. Query flutter_operation_status instead of repeating run/rerun/reload/restart/stop. A timeout does not cancel the original request. If it cannot recover, explicitly stop and run again.");
+    else {
+      boolean screenAsleep = false;
+      if (operation.screen != null && !closed && active.get(operation.target) == operation) {
+        out.add("deviceScreen", operation.screen.json());
+        screenAsleep = operation.screen.state().needsWake();
+      }
+      if (screenAsleep) {
+        out.addProperty("hint", "The Android display was off or dozing when checked. This may explain the delay. The original Flutter request is still being tracked.");
+      } else {
+        out.addProperty("hint", "Check whether the device needs unlocking and bring the app to foreground; check debugger pause and connection. Query flutter_operation_status instead of repeating run/rerun/reload/restart/stop. A timeout does not cancel the original request. If it cannot recover, explicitly stop and run again.");
+      }
+    }
     return out;
   }
 
   synchronized String activeId(String target) { return active.containsKey(target) ? active.get(target).id : null; }
+
+  synchronized String screenSessionId(String id) {
+    Operation operation = activeOperation(id);
+    return operation == null || !checksScreen(operation.kind) ? null : Json.string(operation.context, "sessionId", null);
+  }
+
+  synchronized void observeScreen(String id, DeviceScreen.Reading reading) {
+    Operation operation = activeOperation(id);
+    if (operation != null && (operation.screen == null || !reading.observedAt().isBefore(operation.screen.observedAt()))) {
+      operation.screen = reading;
+    }
+  }
+
+  private Operation activeOperation(String id) {
+    Operation operation = history.get(id);
+    return !closed && operation != null && active.get(operation.target) == operation ? operation : null;
+  }
 
   synchronized void observe(String target, JsonObject state) {
     Operation operation = active.get(target);

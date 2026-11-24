@@ -169,11 +169,11 @@ final class DeviceNavigation {
 
   private static boolean unconfirmed(ProcessOutput result) { return result.isTimeout() || result.isCancelled(); }
 
-  private static boolean succeeded(ProcessOutput result) {
+  static boolean succeeded(ProcessOutput result) {
     return !unconfirmed(result) && result.isExitCodeSet() && result.getExitCode() == 0;
   }
 
-  private static ProcessOutput run(String tool, List<String> command, int timeoutMs) throws IOException {
+  static ProcessOutput run(String tool, List<String> command, int timeoutMs) throws IOException {
     Process process;
     try {
       var builder = new ProcessBuilder(command);
@@ -186,7 +186,7 @@ final class DeviceNavigation {
       throw new IOException("Could not start " + tool + "; check the Android SDK or selected Xcode");
     }
     try {
-      return new CapturingProcessHandler(process, StandardCharsets.UTF_8, tool + " navigation").runProcess(timeoutMs);
+      return new CapturingProcessHandler(process, StandardCharsets.UTF_8, tool).runProcess(timeoutMs);
     } finally {
       if (process.isAlive()) process.destroyForcibly();
     }
