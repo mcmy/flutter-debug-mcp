@@ -237,6 +237,38 @@
   },
   {
     "tool": {
+      "name": "flutter_navigate",
+      "description": "在指定运行中的 Flutter 会话内触发 URI。system 使用 Android 或 iOS 模拟器的系统入口，需要 run 权限。debug 调用 App 已注册的调试路由扩展，需要 extensions 权限，可用于 iOS 真机。accepted 仅表示请求已接受；unknown 时先检查应用状态。",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "description": "Exact running session ID from flutter_sessions."
+          },
+          "mode": {
+            "type": "string",
+            "enum": ["system", "debug"],
+            "description": "system delivers a URL through the device OS. debug calls ext.flutter_debug_mcp.navigate in the target app."
+          },
+          "uri": {
+            "type": "string",
+            "description": "Absolute URI with a scheme, such as myapp://orders/123?source=mcp. Percent-encode spaces."
+          },
+          "appId": {
+            "type": "string",
+            "description": "Android system mode only. Exact application ID of the running app, required when the session's process cannot identify it."
+          }
+        },
+        "required": ["sessionId", "mode", "uri"],
+        "additionalProperties": false
+      }
+    },
+    "bridge": "navigate",
+    "method": null
+  },
+  {
+    "tool": {
       "name": "flutter_run",
       "description": "通过 IDEA 配置启动 Flutter，默认 debug，可传 deviceId。返回统一操作状态；应用配置需确认 Flutter started，其他配置只确认进程创建。 默认最多等待5秒，可用waitSeconds调整为0–10秒。返回operationId/status；pending或unknown时用flutter_operation_status查询，不重复提交。锁屏/前后台状态未知，必要时提示用户检查设备及调试暂停。",
       "inputSchema": {

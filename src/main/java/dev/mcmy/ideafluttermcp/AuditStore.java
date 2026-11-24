@@ -14,9 +14,7 @@ final class AuditStore {
   AuditStore(Path file) throws Exception {
     this.file = file;
     if (Files.exists(file, LinkOption.NOFOLLOW_LINKS)) {
-      if (Files.isSymbolicLink(file) || !Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)
-          || !Files.getOwner(file).equals(Files.getOwner(Path.of(System.getProperty("user.home"))))) throw new SecurityException("Invalid audit file");
-      Files.setPosixFilePermissions(file, java.nio.file.attribute.PosixFilePermissions.fromString("rw-------"));
+      PrivateFiles.file(file);
       if (Files.size(file) > 4 * 1024 * 1024) throw new IllegalStateException("Audit file too large");
       for (String line : Files.readAllLines(file)) if (!line.isBlank()) records.add(JsonParser.parseString(line).getAsJsonObject());
       while (records.size() > 2000) records.removeFirst();

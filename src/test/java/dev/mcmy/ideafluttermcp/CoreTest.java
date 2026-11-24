@@ -2,12 +2,14 @@ package dev.mcmy.ideafluttermcp;
 
 import com.google.gson.*;
 import java.nio.file.*;
+import java.nio.file.attribute.*;
 
 /** 运行不依赖 IDE 实例的关键协议和权限回归。 */
 public final class CoreTest {
   /** 覆盖日志分片、淘汰、分页、上下文、权限分类和审计脱敏。 */
   public static void main(String[] args) throws Exception {
     OperationTrackerTest.run();
+    RuntimeNavigationTest.run();
     assert ToolPolicy.permission("operation_status", Json.obj()).equals("run");
     LineBuffer logs = new LineBuffer(3);
     logs.append("stdout", "first\nhel");
@@ -72,7 +74,15 @@ public final class CoreTest {
       store.add("vm_call", "denied", 1);
       assert new AuditStore(directory.resolve("audit.jsonl")).query("denied", 20).size() == 1;
       assert store.query("", 1).size() == 1;
-      assert Files.getPosixFilePermissions(directory.resolve("audit.jsonl")).equals(java.nio.file.attribute.PosixFilePermissions.fromString("rw-------"));
+      Path audit = directory.resolve("audit.jsonl");
+      if (Files.getFileAttributeView(audit, PosixFileAttributeView.class) != null) {
+        assert Files.getPosixFilePermissions(audit).equals(PosixFilePermissions.fromString("rw-------"));
+      } else {
+        var acl = Files.getFileAttributeView(audit, AclFileAttributeView.class);
+        assert acl.getAcl().size() == 1;
+        assert acl.getAcl().getFirst().type() == AclEntryType.ALLOW;
+        assert acl.getAcl().getFirst().principal().equals(acl.getOwner());
+      }
     } finally {
       try (var files = Files.list(directory)) { for (Path file : files.toList()) Files.delete(file); }
       Files.delete(directory);

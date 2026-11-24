@@ -174,7 +174,9 @@ public final class BridgeService implements Disposable {
   /** 获取调用指定的开放项目，多个项目时要求明确路径。 */
   private Project project(JsonObject args) {
     String path = Json.string(args, "projectPath", "");
-    List<Project> projects = Arrays.stream(ProjectManager.getInstance().getOpenProjects()).filter(p -> !p.isDisposed() && p.getBasePath() != null && (path.isEmpty() || path.equals(p.getBasePath()))).toList();
+    Path requested = path.isEmpty() ? null : Path.of(path).normalize();
+    List<Project> projects = Arrays.stream(ProjectManager.getInstance().getOpenProjects()).filter(p -> !p.isDisposed() && p.getBasePath() != null
+        && (requested == null || requested.equals(Path.of(p.getBasePath()).normalize()))).toList();
     if (projects.size() != 1) throw new IllegalArgumentException("Specify projectPath; matching open projects: " + projects.size());
     return projects.getFirst();
   }
@@ -206,6 +208,7 @@ public final class BridgeService implements Disposable {
   private JsonElement execute(String tool, JsonObject args) throws Exception {
     if (tool.equals("operation_status")) return operations.read(Json.required(args, "operationId"));
     if (Set.of("run", "rerun", "stop", "hot_reload", "hot_restart").contains(tool)) return startOperation(tool, args);
+    if (tool.equals("navigate")) return navigate(args);
     if (tool.equals("audit")) return audit(Json.string(args, "query", ""), Json.integer(args, "limit", 200, 1, 2000));
     if (tool.equals("permissions")) return Json.obj("enabled", Settings.getInstance().getState().enabled, "permissions", Settings.getInstance().getState().permissions);
     if (tool.equals("vm_call")) {
@@ -238,6 +241,53 @@ public final class BridgeService implements Disposable {
     }
     return edt(() -> executeIde(tool, args));
   }
+
+  private JsonObject navigate(JsonObject args) throws Exception {
+    String mode = Json.required(args, "mode");
+    String uri = RuntimeNavigation.uri(Json.required(args, "uri"));
+    String appId = Json.string(args, "appId", null);
+    String permission = ToolPolicy.permission("navigate", args);
+    McpHttpServer serving = server;
+    Session target = session(args);
+    Runnable check = () -> {
+      Settings.getInstance().check(permission);
+      FlutterApp app = target.app;
+      if (disposed || serving == null || server != serving || app.getProject().isDisposed()
+          || !app.isStarted() || !app.isConnected() || app.getProcessHandler().isProcessTerminated()
+          || app.getProcessHandler().isProcessTerminating()) {
+        throw new IllegalStateException("Flutter session is no longer running; refresh flutter_sessions");
+      }
+      if (app.isReloading()) throw new IllegalStateException("Flutter session is reloading or restarting; wait for it to finish");
+    };
+    check.run();
+    FlutterDevice device = edt(target.app::device);
+    JsonObject result;
+    if (mode.equals("debug")) {
+      if (appId != null) throw new IllegalArgumentException("Omit appId in debug mode; sessionId identifies the app");
+      result = RuntimeNavigation.debug(vm(target)::call, uri, check);
+    } else if (DeviceNavigation.android(device.platform())) {
+      int vmPid = androidVmPid(target);
+      result = DeviceNavigation.openAndroid(DeviceNavigation.findAdb(target.app.getProject()), device.deviceId(), uri, appId, vmPid, check);
+    } else {
+      result = DeviceNavigation.openIos(device.platform(), device.emulator(), device.deviceId(), uri, appId, check);
+    }
+    result.addProperty("sessionId", target.id);
+    result.addProperty("deviceId", device.deviceId());
+    result.addProperty("mode", mode);
+    return result;
+  }
+
+  private int androidVmPid(Session target) throws InterruptedException {
+    try {
+      return Json.integer(vm(target).call("getVM", new JsonObject(), 3), "pid", 0, 0, Integer.MAX_VALUE);
+    } catch (InterruptedException error) {
+      throw error;
+    } catch (Exception ignored) {
+      // An explicit application ID still works for sessions without VM Service metadata.
+      return 0;
+    }
+  }
+
   /** 处理需要 IDEA 项目模型的命令。 */
   private JsonElement executeIde(String tool, JsonObject args) throws Exception {
     String permission = ToolPolicy.permission(tool, args);
@@ -264,8 +314,8 @@ public final class BridgeService implements Disposable {
     if (Set.of("dtd", "configurations", "get_configuration", "create_configuration", "update_configuration", "select_device", "devices", "run", "breakpoints", "set_breakpoint", "remove_breakpoint", "source").contains(tool)) {
       Project project = project(args);
       if (tool.equals("source")) {
-        String path = Json.required(args, "filePath");
-        VirtualFile file = LocalFileSystem.getInstance().findFileByPath(path);
+        Path path = Path.of(Json.required(args, "filePath"));
+        VirtualFile file = LocalFileSystem.getInstance().findFileByNioFile(path);
         if (file == null || project.getBasePath() == null || !Path.of(file.getPath()).normalize().startsWith(Path.of(project.getBasePath()).normalize())) throw new IllegalArgumentException("Expected source file inside project");
         var document = com.intellij.openapi.fileEditor.FileDocumentManager.getInstance().getDocument(file);
         if (document == null) throw new IllegalArgumentException("Text document unavailable");
@@ -314,7 +364,7 @@ public final class BridgeService implements Disposable {
         if (!Files.isRegularFile(path) || !path.toString().endsWith(".dart")) throw new IllegalArgumentException("filePath must refer to an existing Dart file (absolute or relative to project)");
         // Construct all replacement values before touching the stored configuration.
         SdkFields fields = new SdkFields();
-        fields.setFilePath(path.toString());
+        fields.setFilePath(path.toString().replace(java.io.File.separatorChar, '/'));
         fields.setAdditionalArgs(emptyToNull(Json.string(updated, "additionalArgs", "")));
         fields.setAttachArgs(emptyToNull(Json.string(updated, "attachArgs", "")));
         fields.setBuildFlavor(emptyToNull(Json.string(updated, "buildFlavor", "")));
@@ -519,7 +569,7 @@ public final class BridgeService implements Disposable {
       return out;
     }
     String path = Json.required(args, "filePath");
-    VirtualFile file = LocalFileSystem.getInstance().findFileByPath(path);
+    VirtualFile file = LocalFileSystem.getInstance().findFileByNioFile(Path.of(path));
     if (file == null || !file.getName().endsWith(".dart") || project.getBasePath() == null || !Path.of(path).normalize().startsWith(Path.of(project.getBasePath()).normalize())) throw new IllegalArgumentException("Expected existing Dart file inside project");
     int line = Json.integer(args, "line", 0, 1, Integer.MAX_VALUE) - 1;
     ApplicationManager.getApplication().runWriteAction(() -> {

@@ -14,9 +14,8 @@ final class EndpointConfig {
     String key = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(identity.getBytes(StandardCharsets.UTF_8))).substring(0, 24);
     Path file = root.resolve("endpoint-" + key + ".secret");
     if (Files.exists(file, LinkOption.NOFOLLOW_LINKS)) {
-      if (Files.isSymbolicLink(file) || !Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS) || Files.size(file) > 256
-          || !Files.getOwner(file).equals(Files.getOwner(Path.of(System.getProperty("user.home"))))) throw new SecurityException("Invalid endpoint secret file");
-      Files.setPosixFilePermissions(file, java.nio.file.attribute.PosixFilePermissions.fromString("rw-------"));
+      PrivateFiles.file(file);
+      if (Files.size(file) > 256) throw new SecurityException("Invalid endpoint secret file");
       String value = Files.readString(file).trim();
       if (!value.matches("[a-f0-9]{64}")) throw new IllegalStateException("Invalid endpoint secret");
       return value;

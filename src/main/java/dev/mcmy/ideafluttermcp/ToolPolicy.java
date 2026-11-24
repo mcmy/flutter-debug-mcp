@@ -22,6 +22,11 @@ final class ToolPolicy {
       case "source" -> "inspect";
       case "logs", "events", "capture_events" -> "logs";
       case "run", "rerun", "stop", "hot_reload", "hot_restart", "operation_status", "select_device", "create_configuration", "update_configuration" -> "run";
+      case "navigate" -> switch (Json.required(args, "mode")) {
+        case "system" -> "run";
+        case "debug" -> "extensions";
+        default -> throw new IllegalArgumentException("Unsupported navigation mode");
+      };
       case "devtools" -> "devtools";
       case "breakpoints", "set_breakpoint", "remove_breakpoint", "debug_action" -> "debug";
       case "vm_call" -> vmPermission(Json.required(args, "method"));

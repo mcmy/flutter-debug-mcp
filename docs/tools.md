@@ -13,6 +13,7 @@
 | `flutter_update_configuration` | 局部修改已有应用配置，使用 run 权限。省略字段保留，可选文本传空字符串清除；envs 整体替换，{} 清空。重命名后使用返回的新 id。不修改执行前任务，不重启进程。 | `configurationId`，以及至少一个配置字段 |
 | `flutter_devices` | 列出 Flutter 插件发现的已连接设备和 selected 状态。 |  |
 | `flutter_select_device` | 选择项目 Flutter 工具栏设备，使用 run 权限；不改变已有会话的设备。 | `deviceId` |
+| `flutter_navigate` | 在运行中的会话投递 URI。`system` 支持 Android 和 iOS 模拟器，使用 run 权限。`debug` 调用 App 的路由扩展，使用 extensions 权限。 | `sessionId`, `mode`, `uri`，无法识别 Android 应用时传 `appId` |
 | `flutter_run` | 启动配置，支持 deviceId、waitSeconds；返回 operationId/status，应用等待 Flutter started，其他配置只确认进程创建。 | `configurationId` |
 | `flutter_hot_reload` | 热重载，默认等待5秒，未完成时查询统一操作状态，不重复调用。 | `sessionId` |
 | `flutter_hot_restart` | 热重启，默认等待5秒；确认成功后重新获取 isolate/object ID。 | `sessionId` |

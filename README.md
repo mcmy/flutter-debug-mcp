@@ -4,7 +4,7 @@ Flutter debugging through MCP for IntelliJ IDEA and Android Studio.
 
 IDEA 插件直接提供原生 **Streamable HTTP MCP**。客户端使用 URL 连接，无需 Python、stdio 转发或额外请求头。
 
-默认全部分类权限开启，服务总开关关闭。启用后始终列出全部48个工具，调用时才检查权限。权限拒绝返回分类名称及 `Settings > Tools > Flutter Debug MCP`，客户端没有修改权限或开启服务器的接口。
+默认全部分类权限开启，服务总开关关闭。启用后始终列出全部49个工具，调用时才检查权限。权限拒绝返回分类名称及 `Settings > Tools > Flutter Debug MCP`，客户端没有修改权限或开启服务器的接口。
 
 ## 安装、配置与复制
 
@@ -12,9 +12,9 @@ IDEA 插件直接提供原生 **Streamable HTTP MCP**。客户端使用 URL 连�
 
 插件作者为 **mcmy**。本版统一使用 `dev.mcmy` 标识与 Java 包名。插件 ID 已变更，IDEA 将其识别为新插件；安装前先卸载旧 ID 的 Flutter Debug MCP，避免两个版本同时加载。设置存储标识与私有缓存目录保持不变，以便在同一 IDE 配置目录下继续读取原有端口、权限、URL令牌和审计。
 
-安装包：`dist/flutter-debug-mcp-0.5.0.zip`。
+安装包：`dist/flutter-debug-mcp-0.6.0.zip`。
 
-通过 GitHub 自定义插件仓库安装及后续更新，见 [发布与自定义插件仓库](docs/publishing.md)。推送与源码版本一致的 `v*` tag（如 `v0.5.0`）会自动构建、运行回归并发布包含插件 ZIP 与仓库索引的 GitHub Release。首次发布完成后，可在 IDEA 的 **Manage Plugin Repositories** 中添加：
+通过 GitHub 自定义插件仓库安装及后续更新，见 [发布与自定义插件仓库](docs/publishing.md)。推送与源码版本一致的 `v*` tag（如 `v0.6.0`）会自动构建、运行回归并发布包含插件 ZIP 与仓库索引的 GitHub Release。可在 IDEA 的 **Manage Plugin Repositories** 中添加：
 
 ```text
 https://github.com/mcmy/flutter-debug-mcp/releases/latest/download/updatePlugins.xml
@@ -57,7 +57,7 @@ tool_timeout_sec = 120
 | 范围 | 功能 |
 | --- | --- |
 | 发现 | 开放项目、Flutter会话、设备与选中状态、运行配置及完整应用启动参数、现有DTD和VM地址 |
-| 运行 | 选择设备、创建/修改IDEA应用运行配置、启动Run/Debug、停止、重新运行、hot reload、hot restart |
+| 运行 | 选择设备、创建/修改IDEA应用运行配置、启动Run/Debug、停止、重新运行、hot reload、hot restart、运行中跳转 |
 | 日志 | stdout/stderr、稳定行号、分页、字面量搜索、大小写选项、来源筛选、匹配上下文扩展 |
 | 事件 | 订阅Debug、Isolate、Logging、Stdout、Stderr、Extension、GC、Timeline并按行查询 |
 | DevTools | 获取或由官方Flutter插件启动DevTools，返回连接URL |
@@ -92,6 +92,19 @@ AI 可先读取配置，再调用 `flutter_update_configuration` 保存局部修
 仅传需要修改的字段，省略的字段保留；`additionalArgs`、`attachArgs`、`buildFlavor` 传空字符串清除。`envs` 整体替换当前配置的环境变量，传 `{}` 清空；需要保留旧变量时先读取并合并。入口支持项目相对路径，保存时转换为绝对路径并检查 Dart 文件存在。`name` 可重命名，之后使用返回的新 `id`。`flutter_create_configuration` 必须提供 `name` 和 `filePath`，可同时传入其余字段；新配置保存在 IDEA 本地工作区。现有配置的存储位置及“执行前”任务保持原样，暂不提供编辑任务链的接口。保存不自动停止或重新启动进程，参数按 IDEA 的规则解析，不执行 shell 展开。
 
 `flutter_devices` 列出当前已连接设备及 `selected` 状态，`flutter_select_device` 接受精确 `deviceId` 并切换项目 Flutter 工具栏设备。也可在 `flutter_run` 传 `deviceId`，先选择再调度启动；省略则沿用当前工具栏设备。设备选择属于项目状态，不绑定到单个配置；启动完成前避免并发切换设备，通过 `flutter_sessions` 确认实际设备。它不会把已有运行会话迁移到新设备，也不负责启动尚未连接的模拟器。
+
+### 运行中跳转
+
+从 `flutter_sessions` 取得正在运行的应用的 `sessionId`，再调用 `flutter_navigate`。目标设备随会话确定。应用已经停止、正在热重载或热重启时，调用会返回错误。
+
+```json
+{"sessionId":"<sessionId>","mode":"system","uri":"myapp://orders/123?source=mcp&tab=details","appId":"com.example.app.dev"}
+```
+
+- **`system`** 使用 `run` 权限。Windows、Linux 和 macOS 均可通过 ADB 向 Android 真机和模拟器发送 VIEW Intent。插件尝试通过 Flutter VM PID 确认应用 ID。无法确定时提供确切的 `appId`，例如包含 flavor 后缀的 Android Application ID。macOS 上的 iOS 模拟器用 Xcode 的 `simctl openurl`，省略 `appId`。目标应用应已注册 URI。系统处理 URI 的当下如果应用刚退出，系统仍可能重新启动应用。
+- **`debug`** 使用 `extensions` 权限，通过已有会话的 Dart VM Service 工作，可用于 Android、iOS 真机或模拟器，以及提供相同 VM 扩展的桌面会话。将 [mcp_navigation.dart](examples/mcp_navigation.dart) 复制到 Flutter App 的 `lib/` 下，在主 isolate 的路由就绪后注册一次 `registerMcpNavigation(handler)`。`handler` 可直接复用现有 deep link 入口并返回 `McpNavigationResult.handled`、`accepted` 或 `rejected`。将示例里的 `mode` 改为 `debug` 并省略 `appId`。首次接入时重新运行 App，使注册代码执行。
+
+`handled` 表示 App 的调试处理器确认处理，`accepted` 表示系统工具或 App 接受了请求，`unknown` 表示未收到确认。调用超时后先检查应用日志或页面状态，再决定是否重试。
 
 `flutter_logs` 示例：
 
@@ -135,7 +148,7 @@ Flutter扩展依运行SDK而异，先用 `flutter_get_isolate` 的 `extensionRPC
 
 8类权限为 `discovery`、`logs`、`run`、`inspect`、`debug`、`evaluate`、`extensions`、`devtools`。默认全部开启；权限撤销后工具仍在目录中，调用返回缺少的分类与设置入口。已发起的操作不会因权限变化而撤销。总开关关闭会断开HTTP服务，此时客户端无法获取目录；开启服务后目录不因分类权限变化而减少。
 
-审计保存时间、实际方法名、ok/denied/error和耗时，不保存参数、表达式、响应、日志正文或令牌。设置页与 `flutter_audit` 均可查询，关闭服务后设置页仍可查询历史。私有缓存为 macOS `~/Library/Caches/idea-flutter-mcp/` 或 Linux `~/.cache/idea-flutter-mcp/`，目录0700，凭据和记录0600；仅支持POSIX权限平台。
+审计保存时间、实际方法名、ok/denied/error和耗时，不保存参数、表达式、响应、日志正文或令牌。设置页与 `flutter_audit` 均可查询，关闭服务后设置页仍可查询历史。私有缓存目录在 macOS 为 `~/Library/Caches/idea-flutter-mcp/`，Linux 为 `~/.cache/idea-flutter-mcp/`，Windows 为 `%LOCALAPPDATA%\idea-flutter-mcp\`。macOS 和 Linux 使用 POSIX 目录权限 `0700` 和文件权限 `0600`。Windows 使用当前账户专用的 NTFS ACL。
 
 服务只绑定127.0.0.1，拒绝浏览器Origin并验证URL令牌。采用无状态Streamable HTTP：POST JSON-RPC，响应为application/json；通知返回202；不提供独立GET SSE流（返回405），无需MCP-Session-Id。支持2025-11-25、2025-06-18、2025-03-26协议。运行时事件通过工具查询，不通过SSE推送。
 
@@ -143,7 +156,7 @@ Flutter扩展依运行SDK而异，先用 `flutter_get_isolate` 的 `extensionRPC
 
 可直接用IDEA或Android Studio打开本目录作为Gradle Java项目。最低支持正式版平台为 **2026.1 / 261.22158.277**，兼容声明为 `261.22158.277–263.*`，面向IDEA 2026.1/2026.2/2026.3，以及使用这些平台分支的Android Studio 2026.x；不承诺早于2026.1正式版的EAP构建。
 
-产物统一使用 **Java21字节码**，以适配2026.1自带的Java21，也可由262/263自带的Java25加载。默认编译SDK为官方 `ideaIC 2026.1`，下载的编译库放在 `~/Library/Caches/idea-flutter-mcp-sdk/ideaIC-2026.1/`，不是安装或启动旧版IDE；默认JDK为本机 `ms-21.0.10`。SDK来源：[JetBrains官方Maven仓库](https://www.jetbrains.com/intellij-repository/releases/com/jetbrains/intellij/idea/ideaIC/2026.1/ideaIC-2026.1.zip)，其他机器可解压到此目录，或使用 `--idea-home` / `-PideaHome` 指向包含 `lib/` 的SDK目录。
+产物统一使用 **Java21字节码**，以适配2026.1自带的Java21，也可由262/263自带的Java25加载。编译用官方 `ideaIC 2026.1` SDK。默认在用户缓存下查找 `idea-flutter-mcp-sdk/ideaIC-2026.1/`，Windows 的用户缓存取 `%LOCALAPPDATA%`，Linux 取 `$XDG_CACHE_HOME` 或 `~/.cache`，macOS 取 `~/Library/Caches`。可用 `--idea-home` / `-PideaHome` 指向包含 `lib/` 的 SDK 目录。Gradle 支持 `-PpluginsHome` 覆盖 Flutter 和 Dart 插件目录，Python 可指定两个 JAR 的路径。使用 `JAVA_HOME` 选择 JDK。 [JetBrains 官方编译 SDK](https://www.jetbrains.com/intellij-repository/releases/com/jetbrains/intellij/idea/ideaIC/2026.1/ideaIC-2026.1.zip)
 
 Flutter98.0.0、Dart511.0.0作为编译依赖，最低平台要求分别为252和253，其字节码均兼容Java21。当前机器这两个插件来自IDEA插件目录；所有IDE/Flutter/Dart JAR都只做编译依赖，不打入插件。
 
@@ -161,6 +174,8 @@ python3 build.py --idea-home "$HOME/Applications/Android Studio.app/Contents" --
 # IDEA263 SDK + JDK26，独立验证新版平台API
 python3 build.py --idea-home "$HOME/Applications/IntelliJ IDEA.app/Contents" --java-home $HOME/Library/Java/JavaVirtualMachines/openjdk-26.0.2.1/Contents/Home
 ```
+
+Linux 使用 `./gradlew --no-daemon buildPlugin`，Windows PowerShell 使用 `.\gradlew.bat --no-daemon buildPlugin`。若依赖放在其他位置，传入 `-PideaHome` 和 `-PpluginsHome`。Windows 源码和断点工具接受 `C:\项目\lib\main.dart` 格式的路径。
 
 构建执行 `CoreTest`、`VmConnectionTest`、`McpHttpServerTest`，分别覆盖日志/权限/审计、VM WebSocket协议、MCP HTTP生命周期/目录/权限拒绝恢复/参数/端口冲突/URL与配置。它们是启用断言的独立Java入口，由Gradle check显式执行，不是JUnit。`build.py`支持覆盖IDEA、Dart、Flutter、Java路径；Gradle支持 `-PideaHome` 和 `-PpluginsHome`。
 

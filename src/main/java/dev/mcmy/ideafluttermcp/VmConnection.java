@@ -10,6 +10,9 @@ import java.util.function.Consumer;
 
 /** 独立 VM 协议连接，不接管 IDEA 自有连接或流订阅。 */
 final class VmConnection implements WebSocket.Listener, AutoCloseable {
+  static final class RpcException extends IllegalStateException {
+    RpcException(JsonElement error) { super("VM RPC: " + error); }
+  }
   private final ConcurrentMap<String, CompletableFuture<JsonObject>> pending = new ConcurrentHashMap<>();
   private final AtomicLong ids = new AtomicLong();
   private final StringBuilder fragments = new StringBuilder();
@@ -57,7 +60,7 @@ final class VmConnection implements WebSocket.Listener, AutoCloseable {
         if (message.has("id")) {
           CompletableFuture<JsonObject> response = pending.get(message.get("id").getAsString());
           if (response != null) {
-            if (message.has("error")) response.completeExceptionally(new IllegalStateException("VM RPC: " + message.get("error")));
+            if (message.has("error")) response.completeExceptionally(new RpcException(message.get("error")));
             else response.complete(message.getAsJsonObject("result"));
           }
         } else if ("streamNotify".equals(Json.string(message, "method", ""))) events.accept(message.getAsJsonObject("params"));
